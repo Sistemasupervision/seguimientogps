@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Crear Plan de Supervisión - PNB Zulia</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="icon" href="LOGO-PNB.png" type="image/png">
+  <style>
+    :root {
+      --pnb-blue: #003366;
+      --pnb-blue-dark: #002244;
+      --pnb-gold: #d4af37;
+    }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f0f4f8;
+    }
+    header {
+      background-color: var(--pnb-blue);
+      color: white;
+      padding: 1.5rem 0;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    .logo-pnb {
+      height: 100px;
+      width: auto;
+      display: block;
+      margin: 0 auto 0.5rem;
+    }
+    .btn-pnb-gold {
+      background-color: var(--pnb-gold);
+      color: var(--pnb-blue-dark);
+      font-weight: bold;
+      border: none;
+    }
+    .btn-pnb-gold:hover {
+      background-color: #c19a2f;
+      color: white;
+    }
+    .card {
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    }
+    footer {
+      background-color: var(--pnb-blue-dark);
+      color: white;
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+  <header class="text-center">
+    <div class="container">
+      <img src="LOGO-PNB.png" alt="Logo PNB" class="logo-pnb">
+      <h1 class="h5 fw-bold">Crear Plan de Supervisión Operativa</h1>
+    </div>
+  </header>
+
+  <div class="container py-4">
+    <div class="card">
+      <div class="card-body">
+        <form id="planForm">
+          <div class="row mb-3">
+            <div class="col-md-6">
+              <label class="form-label fw-bold">Nombre del Plan</label>
+              <input type="text" class="form-control" id="nombrePlan" placeholder="Ej: Operativo Seguridad Maracaibo" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-bold">CCP Asignado</label>
+              <select id="ccpAsignado" class="form-select" required>
+                <option value="">-- Seleccione un CCP --</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-bold">Estaciones Involucradas</label>
+            <select id="estacionesInvolucradas" class="form-select" multiple size="4">
+              <option value="">Seleccione un CCP primero</option>
+            </select>
+            <div class="form-text">Mantenga presionada Ctrl (o Cmd) para seleccionar múltiples estaciones.</div>
+          </div>
+
+          <div class="row mb-3">
+            <div class="col-md-6">
+              <label class="form-label fw-bold">Fecha de Inicio</label>
+              <input type="date" class="form-control" id="fechaInicio" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-bold">Fecha de Finalización</label>
+              <input type="date" class="form-control" id="fechaFin" required>
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-bold">Objetivo del Plan</label>
+            <textarea class="form-control" id="objetivo" rows="3" placeholder="Describa el propósito operativo del plan..." required></textarea>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-bold">Patrullas/Unidades Asignadas</label>
+            <input type="text" class="form-control" id="patrullas" placeholder="Ej: PAT-101, UMO-205, DRON-ZUL">
+          </div>
+
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-pnb-gold">💾 Guardar Plan</button>
+            <a href="index.html" class="btn btn-secondary">← Volver</a>
+          </div>
+        </form>
+        <div id="mensaje" class="mt-3"></div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="text-center py-3 mt-4">
+    <div class="container">
+      © 2025 Policía Nacional Bolivariana - Estado Zulia
+    </div>
+  </footer>
+
+  <!-- Supabase SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script>
+    // Configuración de Supabase (mismas credenciales que tu index.html)
+    const supabaseUrl = 'https://zudpczjuqopswukhygau.supabase.co';
+    const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1ZHBjemp1cW9wc3d1a2h5Z2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU1MTM4NDYsImV4cCI6MjA4MTA4OTg0Nn0.v6E-MZt8CALyfXj6n3m_ePFO017XAQ_JBMJvW4fwaYE';
+    const supabase = supabase.createClient(supabaseUrl, supabaseAnonKey);
+
+    const ccpAsignado = document.getElementById('ccpAsignado');
+    const estacionesInvolucradas = document.getElementById('estacionesInvolucradas');
+    const form = document.getElementById('planForm');
+    const mensaje = document.getElementById('mensaje');
+
+    // Cargar CCPs al iniciar
+    async function cargarCCPs() {
+      const {  data, error } = await supabase
+        .from('ccp')
+        .select('id, nombre')
+        .order('nombre', { ascending: true });
+      if (error) {
+        console.error('Error al cargar CCPs:', error);
+        return;
+      }
+      ccpAsignado.innerHTML = '<option value="">-- Seleccione un CCP --</option>';
+      data.forEach(ccp => {
+        const opt = document.createElement('option');
+        opt.value = ccp.id;
+        opt.textContent = ccp.nombre;
+        ccpAsignado.appendChild(opt);
+      });
+    }
+
+    // Cargar estaciones cuando se selecciona un CCP
+    ccpAsignado.addEventListener('change', async () => {
+      const ccpId = ccpAsignado.value;
+      estacionesInvolucradas.innerHTML = '';
+      if (!ccpId) {
+        estacionesInvolucradas.innerHTML = '<option>Seleccione un CCP primero</option>';
+        return;
+      }
+
+      const {  data, error } = await supabase
+        .from('estaciones')
+        .select('id, nombre')
+        .eq('ccp_id', ccpId)
+        .order('nombre', { ascending: true });
+      if (error) {
+        console.error('Error al cargar estaciones:', error);
+        return;
+      }
+      data.forEach(est => {
+        const opt = document.createElement('option');
+        opt.value = est.id;
+        opt.textContent = est.nombre;
+        estacionesInvolucradas.appendChild(opt);
+      });
+    });
+
+    // Guardar plan (placeholder para integración futura)
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const plan = {
+        nombre: document.getElementById('nombrePlan').value,
+        ccp_id: ccpAsignado.value,
+        estaciones_ids: Array.from(estacionesInvolucradas.selectedOptions).map(opt => opt.value),
+        fecha_inicio: document.getElementById('fechaInicio').value,
+        fecha_fin: document.getElementById('fechaFin').value,
+        objetivo: document.getElementById('objetivo').value,
+        patrullas: document.getElementById('patrullas').value,
+        creado_en: new Date().toISOString()
+      };
+
+      // Aquí iría la inserción en una tabla como "planes_supervision"
+      // Ejemplo (descomenta cuando crees la tabla en Supabase):
+      /*
+      const { error } = await supabase
+        .from('planes_supervision')
+        .insert([plan]);
+      
+      if (error) {
+        mensaje.innerHTML = `<div class="alert alert-danger">❌ Error al guardar: ${error.message}</div>`;
+      } else {
+        mensaje.innerHTML = '<div class="alert alert-success">✅ Plan de supervisión guardado exitosamente.</div>';
+        form.reset();
+        estacionesInvolucradas.innerHTML = '<option>Seleccione un CCP primero</option>';
+      }
+      */
+
+      // Por ahora, solo muestra los datos (modo demo)
+      console.log('Plan a guardar:', plan);
+      mensaje.innerHTML = '<div class="alert alert-info">✅ (Demo) Plan listo para guardar. Para activar el guardado real, crea la tabla <code>planes_supervision</code> en Supabase.</div>';
+    });
+
+    // Inicializar
+    document.addEventListener('DOMContentLoaded', () => {
+      cargarCCPs();
+      // Establecer fechas por defecto
+      const hoy = new Date().toISOString().split('T')[0];
+      document.getElementById('fechaInicio').value = hoy;
+      const futuro = new Date();
+      futuro.setDate(futuro.getDate() + 7);
+      document.getElementById('fechaFin').value = futuro.toISOString().split('T')[0];
+    });
+  </script>
+</body>
+</html>
