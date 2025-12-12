@@ -135,7 +135,7 @@
     </div>
   </footer>
 
-  <!-- ✅ SDK de Supabase (¡ES NECESARIO!) -->
+  <!-- ✅ SDK de Supabase (¡ES OBLIGATORIO!) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.42.0/dist/umd/supabase.min.js"></script>
 
   <script>
@@ -174,7 +174,7 @@
       }
 
       async function cargarCCPs() {
-        const {  data, error } = await client
+        const { data, error } = await client
           .from('ccp')
           .select('id, nombre')
           .order('nombre', { ascending: true });
@@ -198,7 +198,7 @@
           estacionesInvolucradas.innerHTML = '<option>Seleccione un CCP primero</option>';
           return;
         }
-        const {  data, error } = await client
+        const { data, error } = await client
           .from('estaciones')
           .select('id, nombre')
           .eq('ccp_id', ccpId)
@@ -234,21 +234,25 @@
           observaciones: document.getElementById('observaciones').value || null
         };
 
-        const {  plan, error: planError } = await client
+        // ✅ Inserción con manejo seguro de errores
+        const { data: plan, error: planError } = await client
           .from('planes_supervision')
           .insert([planData])
           .select('id')
           .single();
 
-        if (planError) {
-          mensaje.innerHTML = `<div class="alert alert-danger">❌ Error: ${planError.message}</div>`;
+        if (planError || !plan) {
+          console.error('Error al guardar el plan:', planError);
+          mensaje.innerHTML = `<div class="alert alert-danger">❌ No se pudo crear el plan. Verifique que la tabla no tenga columnas obligatorias no cubiertas (ej: 'patrullas').</div>`;
           return;
         }
 
+        // Registrar seguimiento
         await client
           .from('seguimientos_supervision')
           .insert([{ plan_id: plan.id, estado: 'iniciado' }]);
 
+        // Mostrar simulación
         contadorSection.style.display = 'block';
         document.getElementById('planForm').style.display = 'none';
 
