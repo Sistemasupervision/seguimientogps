@@ -143,12 +143,22 @@
     </div>
   </footer>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-  <script>
+ <script>
+  document.addEventListener('DOMContentLoaded', async () => {
+    // 1. Credenciales
     const supabaseUrl = 'https://zudpczjuqopswukhygau.supabase.co';
     const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1ZHBjemp1cW9wc3d1a2h5Z2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU1MTM4NDYsImV4cCI6MjA4MTA4OTg0Nn0.v6E-MZt8CALyfXj6n3m_ePFO017XAQ_JBMJvW4fwaYE';
-    const supabase = supabase.createClient(supabaseUrl, supabaseAnonKey);
 
+    // 2. Verificar SDK
+    if (typeof supabase === 'undefined') {
+      document.getElementById('mensaje').innerHTML = '<div class="alert alert-danger">❌ Supabase SDK no cargado.</div>';
+      return;
+    }
+
+    // 3. ✅ Crear cliente con un nombre DISTINTO (¡no uses "supabase"!)
+    const client = supabase.createClient(supabaseUrl, supabaseAnonKey);
+
+    // 4. Ahora usa "client" en todas las consultas
     const ccpAsignado = document.getElementById('ccpAsignado');
     const estacionesInvolucradas = document.getElementById('estacionesInvolucradas');
     const fechaInicio = document.getElementById('fechaInicio');
@@ -157,11 +167,9 @@
     const contadorSection = document.getElementById('contadorSection');
     const mensaje = document.getElementById('mensaje');
 
-    // Fecha actual
     const hoy = new Date().toISOString().split('T')[0];
     fechaInicio.value = hoy;
 
-    // Calcular tiempo (30 min por estación)
     function calcularTiempo() {
       const count = estacionesInvolucradas.selectedOptions.length;
       if (count === 0) {
@@ -176,13 +184,15 @@
       iniciarBtn.disabled = false;
     }
 
-    // Cargar CCPs
     async function cargarCCPs() {
-      const {  data, error } = await supabase
+      const {  data, error } = await client
         .from('ccp')
         .select('id, nombre')
         .order('nombre', { ascending: true });
-      if (error) { mensaje.innerHTML = `<div class="alert alert-danger">Error CCPs: ${error.message}</div>`; return; }
+      if (error) {
+        mensaje.innerHTML = `<div class="alert alert-danger">Error CCPs: ${error.message}</div>`;
+        return;
+      }
       ccpAsignado.innerHTML = '<option value="">-- Seleccione un CCP --</option>';
       data.forEach(ccp => {
         const opt = document.createElement('option');
@@ -192,7 +202,6 @@
       });
     }
 
-    // Cargar estaciones
     ccpAsignado.addEventListener('change', async () => {
       const ccpId = ccpAsignado.value;
       estacionesInvolucradas.innerHTML = '';
@@ -200,12 +209,15 @@
         estacionesInvolucradas.innerHTML = '<option>Seleccione un CCP primero</option>';
         return;
       }
-      const {  data, error } = await supabase
+      const {  data, error } = await client
         .from('estaciones')
         .select('id, nombre')
         .eq('ccp_id', ccpId)
         .order('nombre', { ascending: true });
-      if (error) { mensaje.innerHTML = `<div class="alert alert-danger">Error estaciones: ${error.message}</div>`; return; }
+      if (error) {
+        mensaje.innerHTML = `<div class="alert alert-danger">Error estaciones: ${error.message}</div>`;
+        return;
+      }
       data.forEach(est => {
         const opt = document.createElement('option');
         opt.value = est.id;
@@ -215,9 +227,12 @@
     });
 
     estacionesInvolucradas.addEventListener('change', calcularTiempo);
-    ccpAsignado.addEventListener('change', () => { tiempoEstimado.value = ''; iniciarBtn.disabled = true; });
+    ccpAsignado.addEventListener('change', () => {
+      tiempoEstimado.value = '';
+      iniciarBtn.disabled = true;
+    });
 
-    // ✅ Iniciar con guardado real
+    // ✅ Guardar y simular
     iniciarBtn.addEventListener('click', async () => {
       const count = estacionesInvolucradas.selectedOptions.length;
       if (count === 0) return;
@@ -227,36 +242,30 @@
         ccp_id: parseInt(ccpAsignado.value),
         estaciones_ids: estacionesIds,
         fecha_inicio: fechaInicio.value,
-        tiempo_estimado_horas: count * 0.5, // 30 min = 0.5 horas
+        tiempo_estimado_horas: count * 0.5,
         observaciones: document.getElementById('observaciones').value || null
       };
 
-      // Guardar plan
-      const { data: plan, error: planError } = await supabase
+      const { data: plan, error: planError } = await client
         .from('planes_supervision')
         .insert([planData])
         .select('id')
         .single();
 
       if (planError) {
-        mensaje.innerHTML = `<div class="alert alert-danger">❌ Error al guardar el plan: ${planError.message}</div>`;
+        mensaje.innerHTML = `<div class="alert alert-danger">❌ Error: ${planError.message}</div>`;
         return;
       }
 
-      // Registrar inicio de seguimiento
-      const { error: segError } = await supabase
+      // Registrar seguimiento
+      await client
         .from('seguimientos_supervision')
         .insert([{ plan_id: plan.id, estado: 'iniciado' }]);
 
-      if (segError) {
-        console.warn('Seguimiento no registrado:', segError);
-      }
-
-      // Mostrar interfaz de supervisión
+      // Mostrar simulación
       contadorSection.style.display = 'block';
-      planForm.style.display = 'none';
+      document.getElementById('planForm').style.display = 'none';
 
-      // Simular mapa
       const map = document.getElementById('mapPlaceholder');
       map.innerHTML = '<div class="text-center py-4">📍 Iniciando seguimiento GPS...</div>';
       setTimeout(() => {
@@ -270,7 +279,6 @@
         }
       }, 1000);
 
-      // Contador regresivo
       let segundos = count * 30 * 60;
       const display = document.getElementById('counterDisplay');
       const timer = setInterval(async () => {
@@ -278,14 +286,11 @@
         const m = Math.floor((segundos % 3600) / 60);
         const s = segundos % 60;
         display.textContent = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-
         if (segundos <= 0) {
           clearInterval(timer);
           display.innerHTML = '<span class="text-success">✅ Supervisión completada</span>';
           map.innerHTML = '<div class="text-center py-5 text-success fw-bold">Operativo finalizado con éxito</div>';
-          
-          // Marcar como completado en Supabase
-          await supabase
+          await client
             .from('seguimientos_supervision')
             .update({ estado: 'completado', fin: new Date().toISOString() })
             .eq('plan_id', plan.id)
@@ -295,7 +300,8 @@
       }, 1000);
     });
 
-    document.addEventListener('DOMContentLoaded', cargarCCPs);
-  </script>
+    cargarCCPs();
+  });
+</script>
 </body>
 </html>
