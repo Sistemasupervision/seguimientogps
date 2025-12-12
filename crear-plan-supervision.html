@@ -52,12 +52,9 @@
     }
     #mapPlaceholder {
       height: 320px;
-      width: 100%;
       border-radius: 8px;
       margin-top: 1rem;
-    }
-    .leaflet-container {
-      border-radius: 8px;
+      background: #f8f9fa;
     }
     footer {
       background-color: var(--pnb-blue-dark);
@@ -134,8 +131,9 @@
     </div>
   </footer>
 
-  <!-- Supabase y Leaflet -->
+  <!-- Supabase SDK -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.42.0/dist/umd/supabase.min.js"></script>
+  <!-- Leaflet JS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
   <script>
@@ -148,7 +146,6 @@
       }
       const client = supabase.createClient(supabaseUrl, supabaseAnonKey);
 
-      // Elementos del DOM
       const ccpAsignado = document.getElementById('ccpAsignado');
       const estacionesCheckContainer = document.getElementById('estacionesCheckContainer');
       const estacionesPagination = document.getElementById('estacionesPagination');
@@ -159,43 +156,181 @@
       const counterDisplay = document.getElementById('counterDisplay');
       const mapPlaceholder = document.getElementById('mapPlaceholder');
       const mensaje = document.getElementById('mensaje');
-      
-      fechaInicio.value = new Date().toISOString().split('T')[0];
+      const hoy = new Date().toISOString().split('T')[0];
+      fechaInicio.value = hoy;
+
       let estacionesCache = [];
       let currentPage = 1;
       const itemsPerPage = 10;
 
-      // Funciones
       function calcularTiempo() {
-        const count = estacionesCheckContainer.querySelectorAll('input[type="checkbox"]:checked').length;
-        tiempoEstimado.value = count ? `${Math.floor(count * 30 / 60)}h ${count * 30 % 60}m` : '';
-        iniciarBtn.disabled = count === 0;
+        const checkboxes = estacionesCheckContainer.querySelectorAll('input[type="checkbox"]:checked');
+        const count = checkboxes.length;
+        if (count === 0) {
+          tiempoEstimado.value = '';
+          iniciarBtn.disabled = true;
+          return;
+        }
+        const minutos = count * 30;
+        const horas = Math.floor(minutos / 60);
+        const mins = minutos % 60;
+        tiempoEstimado.value = `${horas}h ${mins}m`;
+        iniciarBtn.disabled = false;
       }
 
-      function renderEstaciones() {
+      function renderEstacionesWithPagination() {
         const start = (currentPage - 1) * itemsPerPage;
-        const pageEstaciones = estacionesCache.slice(start, start + itemsPerPage);
-        estacionesCheckContainer.innerHTML = pageEstaciones.map(est => `
-          <div class="estacion-check">
-            <input class="form-check-input me-2" type="checkbox" id="est_${est.id}" value="${est.id}">
-            <label class="form-check-label" for="est_${est.id}">${est.nombre}</label>
-          </div>
-        `).join('') || '<p class="text-muted">No hay estaciones.</p>';
+        const end = start + itemsPerPage;
+        const pageEstaciones = estacionesCache.slice(start, end);
 
+        let html = '';
+        pageEstaciones.forEach(est => {
+          const isChecked = document.getElementById(`est_${est.id}`)?.checked || false;
+          html += `
+            <div class="estacion-check">
+              <input class="form-check-input me-2" type="checkbox" id="est_${est.id}" value="${est.id}" ${isChecked ? 'checked' : ''}>
+              <label class="form-check-label" for="est_${est.id}">${est.nombre}</label>
+            </div>
+          `;
+        });
+        estacionesCheckContainer.innerHTML = html || '<p class="text-muted">No hay estaciones para mostrar.</p>';
         estacionesCheckContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => {
           cb.addEventListener('change', calcularTiempo);
         });
 
-        // Paginación
         const totalPages = Math.ceil(estacionesCache.length / itemsPerPage);
-        estacionesPagination.innerHTML = totalPages <= 1 ? '' : `
-          <nav aria-label="Paginación">
-            <ul class="pagination pagination-sm justify-content-center">
-              ${Array.from({length: totalPages}, (_, i) => i + 1).map(p => `
-                <li class="page-item ${p === currentPage ? 'active' : ''}">
-                  <button class="page-link" onclick="changePage(${p})">${p}</button>
-                </li>
-              `).join('')}
-            </ul>
-          </nav>
-        `;
+        if (totalPages <= 1) {
+          estacionesPagination.innerHTML = '';
+          return;
+        }
+
+        let paginationHTML = '<nav aria-label="Paginación"><ul class="pagination pagination-sm justify-content-center">';
+        paginationHTML += `<li class="page-item ${currentPage === 1 ? 'disabled' : ''}"><button class="page-link" onclick="changeStationPage(${currentPage - 1})">«</button></li>`;
+        for (let i = 1; i <= totalPages; i++) {
+          paginationHTML += `<li class="page-item ${i === currentPage ? 'active' : ''}"><button class="page-link" onclick="changeStationPage(${i})">${i}</button></li>`;
+        }
+        paginationHTML += `<li class="page-item ${currentPage === totalPages ? 'disabled' : ''}"><button class="page-link" onclick="changeStationPage(${currentPage + 1})">»</button></li>`;
+        paginationHTML += '</ul></nav>';
+        estacionesPagination.innerHTML = paginationHTML;
+      }
+
+      window.changeStationPage = (page) => {
+        const totalPages = Math.ceil(estacionesCache.length / itemsPerPage);
+        if (page >= 1 && page <= totalPages) {
+          currentPage = page;
+          renderEstacionesWithPagination();
+        }
+      };
+
+      async function cargarCCPs() {
+        const { data, error } = await client
+          .from('ccp')
+          .select('id, nombre')
+          .order('nombre', { ascending: true });
+        if (error) {
+          mensaje.innerHTML = `<div class="alert alert-danger">Error CCPs: ${error.message}</div>`;
+          return;
+        }
+        ccpAsignado.innerHTML = '<option value="">-- Seleccione un CCP --</option>';
+        data.forEach(ccp => {
+          const opt = document.createElement('option');
+          opt.value = ccp.id;
+          opt.textContent = ccp.nombre;
+          ccpAsignado.appendChild(opt);
+        });
+      }
+
+      ccpAsignado.addEventListener('change', async () => {
+        const ccpId = ccpAsignado.value;
+        estacionesCheckContainer.innerHTML = '<p class="text-muted">Cargando estaciones...</p>';
+        estacionesPagination.innerHTML = '';
+        currentPage = 1;
+        if (!ccpId) {
+          estacionesCheckContainer.innerHTML = '<p class="text-muted">Seleccione un CCP primero</p>';
+          return;
+        }
+        const { data, error } = await client
+          .from('estaciones')
+          .select('id, nombre')
+          .eq('ccp_id', ccpId)
+          .order('nombre', { ascending: true });
+        if (error) {
+          mensaje.innerHTML = `<div class="alert alert-danger">Error estaciones: ${error.message}</div>`;
+          return;
+        }
+        estacionesCache = data;
+        renderEstacionesWithPagination();
+      });
+
+      iniciarBtn.addEventListener('click', async () => {
+        const checkboxes = estacionesCheckContainer.querySelectorAll('input[type="checkbox"]:checked');
+        const count = checkboxes.length;
+        if (count === 0) return;
+
+        const estacionesIds = Array.from(checkboxes).map(cb => parseInt(cb.value));
+        const planData = {
+          ccp_id: parseInt(ccpAsignado.value),
+          estaciones_ids: estacionesIds,
+          fecha_inicio: fechaInicio.value,
+          tiempo_estimado_horas: count * 0.5,
+          observaciones: document.getElementById('observaciones').value || null
+        };
+
+        const {  plan, error: planError } = await client
+          .from('planes_supervision')
+          .insert([planData])
+          .select('id')
+          .single();
+
+        if (planError || !plan) {
+          console.error('Error al guardar el plan:', planError);
+          mensaje.innerHTML = `<div class="alert alert-danger">❌ No se pudo crear el plan.</div>`;
+          return;
+        }
+
+        await client
+          .from('seguimientos_supervision')
+          .insert([{ plan_id: plan.id, estado: 'iniciado' }]);
+
+        document.getElementById('planForm').style.display = 'none';
+        contadorSection.style.display = 'block';
+
+        // ✅ Inicializar mapa REAL con Leaflet
+        mapPlaceholder.innerHTML = '';
+        const map = L.map('mapPlaceholder').setView([10.6388, -71.6090], 12);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        }).addTo(map);
+
+        // Agregar marcadores para estaciones seleccionadas
+        const selectedEstaciones = estacionesCache.filter(e => estacionesIds.includes(e.id));
+        selectedEstaciones.forEach((est, i) => {
+          // Simular posición ligeramente aleatoria cerca del centro de Maracaibo
+          const lat = 10.6388 + (Math.random() - 0.5) * 0.03;
+          const lng = -71.6090 + (Math.random() - 0.5) * 0.03;
+          L.marker([lat, lng])
+            .addTo(map)
+            .bindTooltip(est.nombre, { permanent: false, direction: 'top' }) // 👈 Al pasar el mouse
+            .bindPopup(`<b>${est.nombre}</b>`); // 👈 Al hacer clic
+        });
+
+        // Contador regresivo
+        let segundos = count * 30 * 60;
+        const timer = setInterval(() => {
+          const h = Math.floor(segundos / 3600);
+          const m = Math.floor((segundos % 3600) / 60);
+          const s = segundos % 60;
+          counterDisplay.textContent = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+          if (segundos <= 0) {
+            clearInterval(timer);
+            counterDisplay.innerHTML = '<span class="text-success">✅ Operativo Finalizado</span>';
+          }
+          segundos--;
+        }, 1000);
+      });
+
+      cargarCCPs();
+    });
+  </script>
+</body>
+</html>
