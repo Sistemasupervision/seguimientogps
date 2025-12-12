@@ -71,11 +71,12 @@
     </div>
   </header>
   <div class="container py-4">
-    <div class="text-center mb-5">
-      <a href="crear-rutas.html" class="btn btn-pnb-gold btn-lg px-5 py-3 fw-bold shadow">
-        🗺️ Crear o Gestionar Rutas
-      </a>
+    <!-- ✅ Botones pequeños alineados a la izquierda -->
+    <div class="d-flex gap-2 mb-4">
+      <a href="crear-rutas.html" class="btn btn-sm btn-pnb-gold px-3 py-2">Crear o Gestionar Rutas</a>
+      <a href="#" class="btn btn-sm btn-pnb-gold px-3 py-2">Crear Plan de Supervisión</a>
     </div>
+
     <div class="card shadow-sm">
       <div class="card-header">
         <h2 class="h5 mb-0 fw-bold">🔍 Seleccionar Centro de Coordinación Policial (CCP)</h2>
@@ -166,7 +167,7 @@
         renderEstaciones();
       });
 
-      // ✅ Render: lista vertical + botón condicional
+      // ✅ Render: lista vertical + comportamiento condicional
       function renderEstaciones() {
         const start = (currentPage - 1) * itemsPerPage;
         const end = start + itemsPerPage;
@@ -179,18 +180,18 @@
           const div = document.createElement('div');
           div.className = 'd-flex justify-content-between align-items-center p-2 border rounded bg-white';
 
-          let boton;
+          let botonHtml;
           if (e.google_maps_url) {
-            // Si ya tiene URL, abrir Google Maps directamente
-            boton = `<a href="${e.google_maps_url}" target="_blank" class="btn btn-sm btn-primary">Ruta</a>`;
+            // Si tiene ruta, abre Google Maps
+            botonHtml = `<a href="${e.google_maps_url}" target="_blank" class="btn btn-sm btn-primary">Ruta</a>`;
           } else {
-            // Si no, ir al panel de asignación
-            boton = `<a href="crear-rutas.html?estacion=${encodeURIComponent(e.nombre)}" class="btn btn-sm btn-primary">Ruta</a>`;
+            // Si no, muestra mensaje deshabilitado
+            botonHtml = `<span class="text-muted small">No se han configurado rutas aún para esta estación policial.</span>`;
           }
 
           div.innerHTML = `
             <span class="fw-medium">${e.nombre}</span>
-            ${boton}
+            ${botonHtml}
           `;
           container.appendChild(div);
         });
