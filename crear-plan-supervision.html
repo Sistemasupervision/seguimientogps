@@ -61,46 +61,41 @@
     <div class="card">
       <div class="card-body">
         <form id="planForm">
-          <div class="row mb-3">
-            <div class="col-md-6">
-              <label class="form-label fw-bold">Nombre del Plan</label>
-              <input type="text" class="form-control" id="nombrePlan" placeholder="Ej: Operativo Seguridad Maracaibo" required>
-            </div>
-            <div class="col-md-6">
-              <label class="form-label fw-bold">CCP Asignado</label>
-              <select id="ccpAsignado" class="form-select" required>
-                <option value="">-- Seleccione un CCP --</option>
-              </select>
-            </div>
+          <div class="mb-3">
+            <label class="form-label fw-bold">CCP Asignado</label>
+            <select id="ccpAsignado" class="form-select" required>
+              <option value="">-- Seleccione un CCP --</option>
+            </select>
           </div>
 
           <div class="mb-3">
             <label class="form-label fw-bold">Estaciones Involucradas</label>
-            <select id="estacionesInvolucradas" class="form-select" multiple size="4">
+            <select id="estacionesInvolucradas" class="form-select" multiple size="5" required>
               <option value="">Seleccione un CCP primero</option>
             </select>
-            <div class="form-text">Mantenga presionada Ctrl (o Cmd) para seleccionar múltiples estaciones.</div>
+            <div class="form-text">Mantenga presionada <strong>Ctrl</strong> (Windows) o <strong>Cmd</strong> (Mac) para seleccionar varias estaciones.</div>
           </div>
 
           <div class="row mb-3">
             <div class="col-md-6">
               <label class="form-label fw-bold">Fecha de Inicio</label>
-              <input type="date" class="form-control" id="fechaInicio" required>
+              <input type="date" class="form-control" id="fechaInicio" readonly>
             </div>
             <div class="col-md-6">
-              <label class="form-label fw-bold">Fecha de Finalización</label>
-              <input type="date" class="form-control" id="fechaFin" required>
+              <label class="form-label fw-bold">Tiempo Estimado (horas)</label>
+              <input type="number" class="form-control" id="tiempoEstimado" min="0.5" step="0.5" placeholder="Ej: 2.5" required>
+              <div class="form-text">Tiempo aproximado de recorrido según distancia.</div>
             </div>
-          </div>
-
-          <div class="mb-3">
-            <label class="form-label fw-bold">Objetivo del Plan</label>
-            <textarea class="form-control" id="objetivo" rows="3" placeholder="Describa el propósito operativo del plan..." required></textarea>
           </div>
 
           <div class="mb-3">
             <label class="form-label fw-bold">Patrullas/Unidades Asignadas</label>
-            <input type="text" class="form-control" id="patrullas" placeholder="Ej: PAT-101, UMO-205, DRON-ZUL">
+            <input type="text" class="form-control" id="patrullas" placeholder="Ej: PAT-101, UMO-205" required>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-bold">Observaciones (Opcional)</label>
+            <textarea class="form-control" id="observaciones" rows="2"></textarea>
           </div>
 
           <div class="d-flex gap-2">
@@ -122,24 +117,26 @@
   <!-- Supabase SDK -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script>
-    // Configuración de Supabase (mismas credenciales que tu index.html)
     const supabaseUrl = 'https://zudpczjuqopswukhygau.supabase.co';
     const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1ZHBjemp1cW9wc3d1a2h5Z2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU1MTM4NDYsImV4cCI6MjA4MTA4OTg0Nn0.v6E-MZt8CALyfXj6n3m_ePFO017XAQ_JBMJvW4fwaYE';
     const supabase = supabase.createClient(supabaseUrl, supabaseAnonKey);
 
     const ccpAsignado = document.getElementById('ccpAsignado');
     const estacionesInvolucradas = document.getElementById('estacionesInvolucradas');
-    const form = document.getElementById('planForm');
-    const mensaje = document.getElementById('mensaje');
+    const fechaInicio = document.getElementById('fechaInicio');
 
-    // Cargar CCPs al iniciar
+    // Establecer fecha actual automáticamente
+    const hoy = new Date().toISOString().split('T')[0];
+    fechaInicio.value = hoy;
+
+    // Cargar CCPs
     async function cargarCCPs() {
       const {  data, error } = await supabase
         .from('ccp')
         .select('id, nombre')
         .order('nombre', { ascending: true });
       if (error) {
-        console.error('Error al cargar CCPs:', error);
+        console.error('Error CCPs:', error);
         return;
       }
       ccpAsignado.innerHTML = '<option value="">-- Seleccione un CCP --</option>';
@@ -151,7 +148,7 @@
       });
     }
 
-    // Cargar estaciones cuando se selecciona un CCP
+    // Cargar estaciones al seleccionar CCP
     ccpAsignado.addEventListener('change', async () => {
       const ccpId = ccpAsignado.value;
       estacionesInvolucradas.innerHTML = '';
@@ -159,14 +156,13 @@
         estacionesInvolucradas.innerHTML = '<option>Seleccione un CCP primero</option>';
         return;
       }
-
       const {  data, error } = await supabase
         .from('estaciones')
         .select('id, nombre')
         .eq('ccp_id', ccpId)
         .order('nombre', { ascending: true });
       if (error) {
-        console.error('Error al cargar estaciones:', error);
+        console.error('Error estaciones:', error);
         return;
       }
       data.forEach(est => {
@@ -177,52 +173,25 @@
       });
     });
 
-    // Guardar plan (placeholder para integración futura)
-    form.addEventListener('submit', async (e) => {
+    // Guardar (modo demo)
+    document.getElementById('planForm').addEventListener('submit', (e) => {
       e.preventDefault();
+      const estacionesSel = Array.from(estacionesInvolucradas.selectedOptions).map(o => o.textContent);
       
-      const plan = {
-        nombre: document.getElementById('nombrePlan').value,
-        ccp_id: ccpAsignado.value,
-        estaciones_ids: Array.from(estacionesInvolucradas.selectedOptions).map(opt => opt.value),
-        fecha_inicio: document.getElementById('fechaInicio').value,
-        fecha_fin: document.getElementById('fechaFin').value,
-        objetivo: document.getElementById('objetivo').value,
+      console.log('Plan listo para guardar:', {
+        fecha_inicio: fechaInicio.value,
+        estaciones: estacionesSel,
+        tiempo_estimado: document.getElementById('tiempoEstimado').value + ' horas',
         patrullas: document.getElementById('patrullas').value,
-        creado_en: new Date().toISOString()
-      };
-
-      // Aquí iría la inserción en una tabla como "planes_supervision"
-      // Ejemplo (descomenta cuando crees la tabla en Supabase):
-      /*
-      const { error } = await supabase
-        .from('planes_supervision')
-        .insert([plan]);
+        observaciones: document.getElementById('observaciones').value
+      });
       
-      if (error) {
-        mensaje.innerHTML = `<div class="alert alert-danger">❌ Error al guardar: ${error.message}</div>`;
-      } else {
-        mensaje.innerHTML = '<div class="alert alert-success">✅ Plan de supervisión guardado exitosamente.</div>';
-        form.reset();
-        estacionesInvolucradas.innerHTML = '<option>Seleccione un CCP primero</option>';
-      }
-      */
-
-      // Por ahora, solo muestra los datos (modo demo)
-      console.log('Plan a guardar:', plan);
-      mensaje.innerHTML = '<div class="alert alert-info">✅ (Demo) Plan listo para guardar. Para activar el guardado real, crea la tabla <code>planes_supervision</code> en Supabase.</div>';
+      document.getElementById('mensaje').innerHTML = 
+        '<div class="alert alert-success">✅ Plan de supervisión registrado (modo demo). Para activar el guardado real, cree la tabla <code>planes_supervision</code> en Supabase.</div>';
     });
 
-    // Inicializar
-    document.addEventListener('DOMContentLoaded', () => {
-      cargarCCPs();
-      // Establecer fechas por defecto
-      const hoy = new Date().toISOString().split('T')[0];
-      document.getElementById('fechaInicio').value = hoy;
-      const futuro = new Date();
-      futuro.setDate(futuro.getDate() + 7);
-      document.getElementById('fechaFin').value = futuro.toISOString().split('T')[0];
-    });
+    // Iniciar
+    document.addEventListener('DOMContentLoaded', cargarCCPs);
   </script>
 </body>
 </html>
