@@ -111,8 +111,7 @@
             </div>
             <div class="col-md-6">
               <label class="form-label fw-bold">Tiempo Estimado</label>
-              <input type="text" class="form-control" id="tiempoEstimado" readonly placeholder="Se calcula automáticamente">
-              <div class="form-text">30 minutos por estación seleccionada.</div>
+              <input type="text" class="form-control" id="tiempoEstimado" readonly>
             </div>
           </div>
 
@@ -127,12 +126,13 @@
           </div>
         </form>
 
-        <!-- Contador regresivo (oculto al inicio) -->
         <div id="contadorSection" style="display:none; margin-top: 2rem;">
           <h5 class="text-center fw-bold">⏱️ Tiempo Restante</h5>
           <div id="counterDisplay">--:--:--</div>
           <div id="mapPlaceholder"></div>
         </div>
+
+        <div id="mensaje" class="mt-3"></div>
       </div>
     </div>
   </div>
@@ -155,12 +155,13 @@
     const tiempoEstimado = document.getElementById('tiempoEstimado');
     const iniciarBtn = document.getElementById('iniciarBtn');
     const contadorSection = document.getElementById('contadorSection');
+    const mensaje = document.getElementById('mensaje');
 
     // Fecha actual
     const hoy = new Date().toISOString().split('T')[0];
     fechaInicio.value = hoy;
 
-    // Calcular tiempo estimado
+    // Calcular tiempo (30 min por estación)
     function calcularTiempo() {
       const count = estacionesInvolucradas.selectedOptions.length;
       if (count === 0) {
@@ -168,7 +169,7 @@
         iniciarBtn.disabled = true;
         return;
       }
-      const minutos = count * 30; // 30 min por estación
+      const minutos = count * 30;
       const horas = Math.floor(minutos / 60);
       const mins = minutos % 60;
       tiempoEstimado.value = `${horas}h ${mins}m`;
@@ -181,7 +182,7 @@
         .from('ccp')
         .select('id, nombre')
         .order('nombre', { ascending: true });
-      if (error) return;
+      if (error) { mensaje.innerHTML = `<div class="alert alert-danger">Error CCPs: ${error.message}</div>`; return; }
       ccpAsignado.innerHTML = '<option value="">-- Seleccione un CCP --</option>';
       data.forEach(ccp => {
         const opt = document.createElement('option');
@@ -204,7 +205,7 @@
         .select('id, nombre')
         .eq('ccp_id', ccpId)
         .order('nombre', { ascending: true });
-      if (error) return;
+      if (error) { mensaje.innerHTML = `<div class="alert alert-danger">Error estaciones: ${error.message}</div>`; return; }
       data.forEach(est => {
         const opt = document.createElement('option');
         opt.value = est.id;
@@ -213,23 +214,49 @@
       });
     });
 
-    // Eventos
     estacionesInvolucradas.addEventListener('change', calcularTiempo);
-    ccpAsignado.addEventListener('change', () => {
-      tiempoEstimado.value = '';
-      iniciarBtn.disabled = true;
-    });
+    ccpAsignado.addEventListener('change', () => { tiempoEstimado.value = ''; iniciarBtn.disabled = true; });
 
-    // Iniciar supervisión
-    iniciarBtn.addEventListener('click', () => {
+    // ✅ Iniciar con guardado real
+    iniciarBtn.addEventListener('click', async () => {
       const count = estacionesInvolucradas.selectedOptions.length;
       if (count === 0) return;
 
-      const totalSegundos = count * 30 * 60; // 30 min por estación en segundos
+      const estacionesIds = Array.from(estacionesInvolucradas.selectedOptions).map(opt => parseInt(opt.value));
+      const planData = {
+        ccp_id: parseInt(ccpAsignado.value),
+        estaciones_ids: estacionesIds,
+        fecha_inicio: fechaInicio.value,
+        tiempo_estimado_horas: count * 0.5, // 30 min = 0.5 horas
+        observaciones: document.getElementById('observaciones').value || null
+      };
+
+      // Guardar plan
+      const { data: plan, error: planError } = await supabase
+        .from('planes_supervision')
+        .insert([planData])
+        .select('id')
+        .single();
+
+      if (planError) {
+        mensaje.innerHTML = `<div class="alert alert-danger">❌ Error al guardar el plan: ${planError.message}</div>`;
+        return;
+      }
+
+      // Registrar inicio de seguimiento
+      const { error: segError } = await supabase
+        .from('seguimientos_supervision')
+        .insert([{ plan_id: plan.id, estado: 'iniciado' }]);
+
+      if (segError) {
+        console.warn('Seguimiento no registrado:', segError);
+      }
+
+      // Mostrar interfaz de supervisión
       contadorSection.style.display = 'block';
       planForm.style.display = 'none';
 
-      // Simular mapa con puntos
+      // Simular mapa
       const map = document.getElementById('mapPlaceholder');
       map.innerHTML = '<div class="text-center py-4">📍 Iniciando seguimiento GPS...</div>';
       setTimeout(() => {
@@ -244,20 +271,25 @@
       }, 1000);
 
       // Contador regresivo
-      let segundos = totalSegundos;
+      let segundos = count * 30 * 60;
       const display = document.getElementById('counterDisplay');
-      
-      const timer = setInterval(() => {
+      const timer = setInterval(async () => {
         const h = Math.floor(segundos / 3600);
         const m = Math.floor((segundos % 3600) / 60);
         const s = segundos % 60;
-        display.textContent = 
-          `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-        
+        display.textContent = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+
         if (segundos <= 0) {
           clearInterval(timer);
           display.innerHTML = '<span class="text-success">✅ Supervisión completada</span>';
           map.innerHTML = '<div class="text-center py-5 text-success fw-bold">Operativo finalizado con éxito</div>';
+          
+          // Marcar como completado en Supabase
+          await supabase
+            .from('seguimientos_supervision')
+            .update({ estado: 'completado', fin: new Date().toISOString() })
+            .eq('plan_id', plan.id)
+            .eq('estado', 'iniciado');
         }
         segundos--;
       }, 1000);
