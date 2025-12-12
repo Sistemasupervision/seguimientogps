@@ -74,7 +74,7 @@
     <!-- ✅ Botones pequeños alineados a la izquierda -->
     <div class="d-flex gap-2 mb-4">
       <a href="crear-rutas.html" class="btn btn-sm btn-pnb-gold px-3 py-2">Crear o Gestionar Rutas</a>
-      <a href="#" class="btn btn-sm btn-pnb-gold px-3 py-2">Crear Plan de Supervisión</a>
+      <a href="crear-plan-supervision.html" class="btn btn-sm btn-pnb-gold px-3 py-2">Crear Plan de Supervisión</a>
     </div>
 
     <div class="card shadow-sm">
@@ -114,7 +114,6 @@
       const ccpSelector = document.getElementById('ccpSelector');
       const estacionesContainer = document.getElementById('estacionesContainer');
 
-      // 🗂️ Cargar CCPs
       const { data: ccps, error: ccpError } = await client
         .from('ccp')
         .select('id, nombre')
@@ -132,15 +131,9 @@
         ccpSelector.appendChild(opt);
       });
 
-      let estacionesList = [];
-      let currentPage = 1;
-      const itemsPerPage = 10;
-
-      // 🔍 Cargar estaciones (incluyendo google_maps_url)
       ccpSelector.addEventListener('change', async () => {
         const ccpId = ccpSelector.value;
         estacionesContainer.innerHTML = '';
-        currentPage = 1;
 
         if (!ccpId) {
           estacionesContainer.innerHTML = '<p class="text-muted text-center">Seleccione un CCP para visualizar sus estaciones policiales.</p>';
@@ -149,7 +142,7 @@
 
         const { data: estaciones, error: estError } = await client
           .from('estaciones')
-          .select('id, nombre, google_maps_url')
+          .select('nombre')
           .eq('ccp_id', ccpId)
           .order('nombre', { ascending: true });
 
@@ -163,81 +156,16 @@
           return;
         }
 
-        estacionesList = estaciones;
-        renderEstaciones();
-      });
-
-      // ✅ Render: lista vertical + comportamiento condicional
-      function renderEstaciones() {
-        const start = (currentPage - 1) * itemsPerPage;
-        const end = start + itemsPerPage;
-        const pageEstaciones = estacionesList.slice(start, end);
-
-        const container = document.createElement('div');
-        container.className = 'd-flex flex-column gap-2';
-
-        pageEstaciones.forEach(e => {
-          const div = document.createElement('div');
-          div.className = 'd-flex justify-content-between align-items-center p-2 border rounded bg-white';
-
-          let botonHtml;
-          if (e.google_maps_url) {
-            // Si tiene ruta, abre Google Maps
-            botonHtml = `<a href="${e.google_maps_url}" target="_blank" class="btn btn-sm btn-primary">Ruta</a>`;
-          } else {
-            // Si no, muestra mensaje deshabilitado
-            botonHtml = `<span class="text-muted small">No se han configurado rutas aún para esta estación policial.</span>`;
-          }
-
-          div.innerHTML = `
-            <span class="fw-medium">${e.nombre}</span>
-            ${botonHtml}
-          `;
-          container.appendChild(div);
+        const ul = document.createElement('ul');
+        ul.className = 'list-group';
+        estaciones.forEach(e => {
+          const li = document.createElement('li');
+          li.className = 'list-group-item';
+          li.textContent = e.nombre;
+          ul.appendChild(li);
         });
-
-        // Paginación
-        const totalPages = Math.ceil(estacionesList.length / itemsPerPage);
-        let paginationHTML = '';
-        if (totalPages > 1) {
-          const pageItems = [];
-          pageItems.push(`<li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
-            <button class="page-link" onclick="window.changePage(${currentPage - 1})">« Anterior</button>
-          </li>`);
-
-          for (let i = 1; i <= totalPages; i++) {
-            pageItems.push(`<li class="page-item ${i === currentPage ? 'active' : ''}">
-              <button class="page-link" onclick="window.changePage(${i})">${i}</button>
-            </li>`);
-          }
-
-          pageItems.push(`<li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
-            <button class="page-link" onclick="window.changePage(${currentPage + 1})">Siguiente »</button>
-          </li>`);
-
-          paginationHTML = `
-            <nav aria-label="Paginación" class="mt-3">
-              <ul class="pagination justify-content-center">${pageItems.join('')}</ul>
-            </nav>
-          `;
-        }
-
-        estacionesContainer.innerHTML = '';
-        estacionesContainer.appendChild(container);
-        if (paginationHTML) {
-          const paginationDiv = document.createElement('div');
-          paginationDiv.innerHTML = paginationHTML;
-          estacionesContainer.appendChild(paginationDiv);
-        }
-      }
-
-      window.changePage = (page) => {
-        const totalPages = Math.ceil(estacionesList.length / itemsPerPage);
-        if (page >= 1 && page <= totalPages) {
-          currentPage = page;
-          renderEstaciones();
-        }
-      };
+        estacionesContainer.appendChild(ul);
+      });
     });
   </script>
 
