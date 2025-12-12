@@ -54,7 +54,6 @@
       height: 320px;
       border-radius: 8px;
       margin-top: 1rem;
-      background: #f8f9fa;
     }
     footer {
       background-color: var(--pnb-blue-dark);
@@ -276,15 +275,14 @@
           observaciones: document.getElementById('observaciones').value || null
         };
 
-        const {  plan, error: planError } = await client
+        const { data: plan, error: planError } = await client
           .from('planes_supervision')
           .insert([planData])
           .select('id')
           .single();
 
-        if (planError || !plan) {
-          console.error('Error al guardar el plan:', planError);
-          mensaje.innerHTML = `<div class="alert alert-danger">❌ No se pudo crear el plan.</div>`;
+        if (planError) {
+          mensaje.innerHTML = `<div class="alert alert-danger">❌ Error: ${planError.message || 'No se pudo crear el plan. Verifique la tabla en Supabase.'}</div>`;
           return;
         }
 
@@ -295,23 +293,21 @@
         document.getElementById('planForm').style.display = 'none';
         contadorSection.style.display = 'block';
 
-        // ✅ Inicializar mapa REAL con Leaflet
+        // ✅ MAPA REAL CON LEAFLET
         mapPlaceholder.innerHTML = '';
         const map = L.map('mapPlaceholder').setView([10.6388, -71.6090], 12);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
           attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         }).addTo(map);
 
-        // Agregar marcadores para estaciones seleccionadas
         const selectedEstaciones = estacionesCache.filter(e => estacionesIds.includes(e.id));
         selectedEstaciones.forEach((est, i) => {
-          // Simular posición ligeramente aleatoria cerca del centro de Maracaibo
-          const lat = 10.6388 + (Math.random() - 0.5) * 0.03;
-          const lng = -71.6090 + (Math.random() - 0.5) * 0.03;
+          const lat = 10.6388 + (Math.random() - 0.5) * 0.02;
+          const lng = -71.6090 + (Math.random() - 0.5) * 0.02;
           L.marker([lat, lng])
             .addTo(map)
-            .bindTooltip(est.nombre, { permanent: false, direction: 'top' }) // 👈 Al pasar el mouse
-            .bindPopup(`<b>${est.nombre}</b>`); // 👈 Al hacer clic
+            .bindTooltip(est.nombre, { permanent: false, direction: 'top' })
+            .bindPopup(`<b>${est.nombre}</b>`);
         });
 
         // Contador regresivo
