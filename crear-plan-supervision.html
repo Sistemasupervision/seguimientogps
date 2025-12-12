@@ -42,33 +42,55 @@
       border-radius: 12px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.08);
     }
+    .estacion-check {
+      display: flex;
+      align-items: center;
+      padding: 0.5rem 0;
+      border-bottom: 1px solid #eee;
+    }
+    .estacion-check:last-child {
+      border-bottom: none;
+    }
     #mapPlaceholder {
       height: 300px;
-      background: linear-gradient(135deg, #e0e7ff, #bbd0ff);
+      background: linear-gradient(135deg, #e0f0ff, #bbdfff);
       border-radius: 8px;
       position: relative;
       overflow: hidden;
     }
-    .map-dot {
+    .map-unit {
       position: absolute;
-      width: 16px;
-      height: 16px;
+      width: 24px;
+      height: 24px;
       background: var(--pnb-gold);
       border-radius: 50%;
-      box-shadow: 0 0 8px rgba(0,0,0,0.4);
-      animation: pulse 2s infinite;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--pnb-blue);
+      font-weight: bold;
+      font-size: 12px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+      animation: bounce 2s infinite;
     }
-    @keyframes pulse {
-      0% { transform: scale(1); opacity: 1; }
-      50% { transform: scale(1.2); opacity: 0.8; }
-      100% { transform: scale(1); opacity: 1; }
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-10px); }
     }
     #counterDisplay {
-      font-size: 2rem;
+      font-size: 2.2rem;
       font-weight: bold;
       color: var(--pnb-blue);
       text-align: center;
       margin: 1rem 0;
+      text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+    }
+    .launch-animation {
+      animation: fadeInScale 0.8s ease-out;
+    }
+    @keyframes fadeInScale {
+      from { opacity: 0; transform: scale(0.9); }
+      to { opacity: 1; transform: scale(1); }
     }
     footer {
       background-color: var(--pnb-blue-dark);
@@ -94,13 +116,14 @@
               <option value="">-- Seleccione un CCP --</option>
             </select>
           </div>
+
           <div class="mb-3">
             <label class="form-label fw-bold">Estaciones Involucradas</label>
-            <select id="estacionesInvolucradas" class="form-select" multiple size="5" required>
-              <option value="">Seleccione un CCP primero</option>
-            </select>
-            <div class="form-text">Seleccione las estaciones que incluirá en su recorrido.</div>
+            <div id="estacionesCheckContainer" class="mt-2">
+              <p class="text-muted">Seleccione un CCP primero</p>
+            </div>
           </div>
+
           <div class="row mb-3">
             <div class="col-md-6">
               <label class="form-label fw-bold">Fecha de Inicio</label>
@@ -111,20 +134,24 @@
               <input type="text" class="form-control" id="tiempoEstimado" readonly>
             </div>
           </div>
+
           <div class="mb-3">
             <label class="form-label fw-bold">Observaciones (Opcional)</label>
             <textarea class="form-control" id="observaciones" rows="2"></textarea>
           </div>
+
           <div class="d-flex gap-2">
             <button type="button" id="iniciarBtn" class="btn btn-pnb-gold" disabled>▶️ Iniciar Supervisión</button>
             <a href="index.html" class="btn btn-secondary">← Volver</a>
           </div>
         </form>
-        <div id="contadorSection" style="display:none; margin-top: 2rem;">
+
+        <div id="contadorSection" style="display:none; margin-top: 2rem;" class="launch-animation">
           <h5 class="text-center fw-bold">⏱️ Tiempo Restante</h5>
           <div id="counterDisplay">--:--:--</div>
           <div id="mapPlaceholder"></div>
         </div>
+
         <div id="mensaje" class="mt-3"></div>
       </div>
     </div>
@@ -135,22 +162,21 @@
     </div>
   </footer>
 
-  <!-- ✅ SDK de Supabase (¡ES OBLIGATORIO!) -->
+  <!-- Supabase SDK -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.42.0/dist/umd/supabase.min.js"></script>
 
   <script>
     document.addEventListener('DOMContentLoaded', async () => {
       const supabaseUrl = 'https://zudpczjuqopswukhygau.supabase.co';
       const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1ZHBjemp1cW9wc3d1a2h5Z2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU1MTM4NDYsImV4cCI6MjA4MTA4OTg0Nn0.v6E-MZt8CALyfXj6n3m_ePFO017XAQ_JBMJvW4fwaYE';
-      
       if (typeof supabase === 'undefined') {
         document.getElementById('mensaje').innerHTML = '<div class="alert alert-danger">❌ Supabase SDK no cargado.</div>';
         return;
       }
-
       const client = supabase.createClient(supabaseUrl, supabaseAnonKey);
+
       const ccpAsignado = document.getElementById('ccpAsignado');
-      const estacionesInvolucradas = document.getElementById('estacionesInvolucradas');
+      const estacionesCheckContainer = document.getElementById('estacionesCheckContainer');
       const fechaInicio = document.getElementById('fechaInicio');
       const tiempoEstimado = document.getElementById('tiempoEstimado');
       const iniciarBtn = document.getElementById('iniciarBtn');
@@ -159,8 +185,11 @@
       const hoy = new Date().toISOString().split('T')[0];
       fechaInicio.value = hoy;
 
+      let estacionesCache = [];
+
       function calcularTiempo() {
-        const count = estacionesInvolucradas.selectedOptions.length;
+        const checkboxes = estacionesCheckContainer.querySelectorAll('input[type="checkbox"]:checked');
+        const count = checkboxes.length;
         if (count === 0) {
           tiempoEstimado.value = '';
           iniciarBtn.disabled = true;
@@ -193,9 +222,9 @@
 
       ccpAsignado.addEventListener('change', async () => {
         const ccpId = ccpAsignado.value;
-        estacionesInvolucradas.innerHTML = '';
+        estacionesCheckContainer.innerHTML = '<p class="text-muted">Cargando estaciones...</p>';
         if (!ccpId) {
-          estacionesInvolucradas.innerHTML = '<option>Seleccione un CCP primero</option>';
+          estacionesCheckContainer.innerHTML = '<p class="text-muted">Seleccione un CCP primero</p>';
           return;
         }
         const { data, error } = await client
@@ -207,25 +236,36 @@
           mensaje.innerHTML = `<div class="alert alert-danger">Error estaciones: ${error.message}</div>`;
           return;
         }
-        data.forEach(est => {
-          const opt = document.createElement('option');
-          opt.value = est.id;
-          opt.textContent = est.nombre;
-          estacionesInvolucradas.appendChild(opt);
-        });
+        estacionesCache = data;
+        renderEstacionesCheckboxes(data);
       });
 
-      estacionesInvolucradas.addEventListener('change', calcularTiempo);
-      ccpAsignado.addEventListener('change', () => {
-        tiempoEstimado.value = '';
-        iniciarBtn.disabled = true;
-      });
+      function renderEstacionesCheckboxes(estaciones) {
+        if (estaciones.length === 0) {
+          estacionesCheckContainer.innerHTML = '<p class="text-muted">Este CCP no tiene estaciones registradas.</p>';
+          return;
+        }
+        let html = '';
+        estaciones.forEach(est => {
+          html += `
+            <div class="estacion-check">
+              <input class="form-check-input me-2" type="checkbox" id="est_${est.id}" value="${est.id}">
+              <label class="form-check-label" for="est_${est.id}">${est.nombre}</label>
+            </div>
+          `;
+        });
+        estacionesCheckContainer.innerHTML = html;
+        estacionesCheckContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+          cb.addEventListener('change', calcularTiempo);
+        });
+      }
 
       iniciarBtn.addEventListener('click', async () => {
-        const count = estacionesInvolucradas.selectedOptions.length;
+        const checkboxes = estacionesCheckContainer.querySelectorAll('input[type="checkbox"]:checked');
+        const count = checkboxes.length;
         if (count === 0) return;
 
-        const estacionesIds = Array.from(estacionesInvolucradas.selectedOptions).map(opt => parseInt(opt.value));
+        const estacionesIds = Array.from(checkboxes).map(cb => parseInt(cb.value));
         const planData = {
           ccp_id: parseInt(ccpAsignado.value),
           estaciones_ids: estacionesIds,
@@ -234,7 +274,6 @@
           observaciones: document.getElementById('observaciones').value || null
         };
 
-        // ✅ Inserción con manejo seguro de errores
         const { data: plan, error: planError } = await client
           .from('planes_supervision')
           .insert([planData])
@@ -243,31 +282,33 @@
 
         if (planError || !plan) {
           console.error('Error al guardar el plan:', planError);
-          mensaje.innerHTML = `<div class="alert alert-danger">❌ No se pudo crear el plan. Verifique que la tabla no tenga columnas obligatorias no cubiertas (ej: 'patrullas').</div>`;
+          mensaje.innerHTML = `<div class="alert alert-danger">❌ No se pudo crear el plan. Verifique la estructura de la tabla en Supabase.</div>`;
           return;
         }
 
-        // Registrar seguimiento
         await client
           .from('seguimientos_supervision')
           .insert([{ plan_id: plan.id, estado: 'iniciado' }]);
 
-        // Mostrar simulación
-        contadorSection.style.display = 'block';
+        // Mostrar simulación con animación
         document.getElementById('planForm').style.display = 'none';
+        contadorSection.style.display = 'block';
 
         const map = document.getElementById('mapPlaceholder');
-        map.innerHTML = '<div class="text-center py-4">📍 Iniciando seguimiento GPS...</div>';
+        map.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Iniciando...</span></div><p class="mt-2">📡 Estableciendo conexión con unidades...</p></div>';
+        
         setTimeout(() => {
           map.innerHTML = '';
-          for (let i = 0; i < count; i++) {
-            const dot = document.createElement('div');
-            dot.className = 'map-dot';
-            dot.style.left = `${20 + i * 15}%`;
-            dot.style.top = `${30 + Math.sin(i) * 20 + 20}%`;
-            map.appendChild(dot);
-          }
-        }, 1000);
+          const selectedEstaciones = estacionesCache.filter(e => estacionesIds.includes(e.id));
+          selectedEstaciones.forEach((est, i) => {
+            const unit = document.createElement('div');
+            unit.className = 'map-unit';
+            unit.textContent = 'P';
+            unit.style.left = `${20 + i * 12}%`;
+            unit.style.top = `${30 + Math.sin(i) * 15 + 15}%`;
+            map.appendChild(unit);
+          });
+        }, 1500);
 
         let segundos = count * 30 * 60;
         const display = document.getElementById('counterDisplay');
@@ -278,8 +319,8 @@
           display.textContent = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
           if (segundos <= 0) {
             clearInterval(timer);
-            display.innerHTML = '<span class="text-success">✅ Supervisión completada</span>';
-            map.innerHTML = '<div class="text-center py-5 text-success fw-bold">Operativo finalizado con éxito</div>';
+            display.innerHTML = '<span class="text-success">✅ Operativo Finalizado</span>';
+            map.innerHTML = '<div class="text-center py-5"><div class="text-success" style="font-size:3rem;">🛡️</div><p class="mt-2 fw-bold">¡Supervisión completada con éxito!</p></div>';
             await client
               .from('seguimientos_supervision')
               .update({ estado: 'completado', fin: new Date().toISOString() })
