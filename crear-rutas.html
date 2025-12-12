@@ -146,24 +146,32 @@
       }
 
       // Guardar ruta
-      async function guardarRuta() {
-        const estacionId = estacionSelect.value;
-        const url = mapsUrl.value.trim();
-        if (!estacionId || !url) {
-          mensaje.innerHTML = '<div class="alert alert-warning">Seleccione una estación e ingrese un enlace válido.</div>';
-          return;
-        }
-        const { error } = await client
-          .from('estaciones')
-          .update({ google_maps_url: url })
-          .eq('id', estacionId);
-        if (error) {
-          mensaje.innerHTML = `<div class="alert alert-danger">Error: ${error.message}</div>`;
-        } else {
-          mensaje.innerHTML = '<div class="alert alert-success">✅ Ruta guardada correctamente.</div>';
-          mapsUrl.value = '';
-        }
-      }
+async function guardarRuta() {
+  const estacionId = estacionSelect.value;
+  const url = mapsUrl.value.trim();
+  if (!estacionId || !url) {
+    mensaje.innerHTML = '<div class="alert alert-warning">Seleccione una estación e ingrese un enlace válido.</div>';
+    return;
+  }
+
+  try {
+    const { error } = await client
+      .from('estaciones')
+      .update({ google_maps_url: url })
+      .eq('id', estacionId);
+
+    if (error) {
+      console.error('Error al guardar ruta:', error); // 👈 Esto te muestra el error real
+      mensaje.innerHTML = `<div class="alert alert-danger">❌ Error: ${error.message}</div>`;
+    } else {
+      mensaje.innerHTML = '<div class="alert alert-success">✅ Ruta guardada correctamente.</div>';
+      mapsUrl.value = '';
+    }
+  } catch (err) {
+    console.error('Excepción inesperada:', err);
+    mensaje.innerHTML = '<div class="alert alert-danger">❌ Error inesperado. Verifique la consola.</div>';
+  }
+}
 
       ccpSelect.addEventListener('change', (e) => {
         if (e.target.value) cargarEstaciones(e.target.value);
