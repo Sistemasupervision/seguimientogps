@@ -96,15 +96,12 @@
       Sistema de Seguimiento GPS - Desarrollado con fines operativos
     </div>
   </footer>
-
 <!-- ✅ CDN FIJO que SÍ expone "supabase" (minúscula) -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-
 <script>
   document.addEventListener('DOMContentLoaded', async () => {
     const supabaseUrl = 'https://zudpczjuqopswukhygau.supabase.co';
     const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1ZHBjemp1cW9wc3d1a2h5Z2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU1MTM4NDYsImV4cCI6MjA4MTA4OTg0Nn0.v6E-MZt8CALyfXj6n3m_ePFO017XAQ_JBMJvW4fwaYE';
-
     // ✅ Verificación correcta: "supabase" (minúscula)
     if (typeof supabase === 'undefined') {
       document.getElementById('estacionesContainer').innerHTML =
@@ -112,22 +109,18 @@
       console.error('El objeto global "supabase" no está definido.');
       return;
     }
-
     const client = supabase.createClient(supabaseUrl, supabaseAnonKey);
     const ccpSelector = document.getElementById('ccpSelector');
     const estacionesContainer = document.getElementById('estacionesContainer');
-
     // 🗂️ Cargar CCPs
     const { data: ccps, error: ccpError } = await client
       .from('ccp')
       .select('id, nombre')
       .order('nombre', { ascending: true });
-
     if (ccpError) {
       estacionesContainer.innerHTML = `<p class="text-danger text-center">Error al cargar CCPs: ${ccpError.message}</p>`;
       return;
     }
-
     ccpSelector.innerHTML = '<option value="">-- Seleccione un CCP --</option>';
     ccps.forEach(ccp => {
       const opt = document.createElement('option');
@@ -136,42 +129,106 @@
       ccpSelector.appendChild(opt);
     });
 
+    let estacionesList = [];
+    let currentPage = 1;
+    const itemsPerPage = 10;
+
     // 🔍 Cargar estaciones al seleccionar
     ccpSelector.addEventListener('change', async () => {
       const ccpId = ccpSelector.value;
       estacionesContainer.innerHTML = '';
+      currentPage = 1;
 
       if (!ccpId) {
         estacionesContainer.innerHTML = '<p class="text-muted text-center">Seleccione un CCP para visualizar sus estaciones policiales.</p>';
         return;
       }
-
       const { data: estaciones, error: estError } = await client
         .from('estaciones')
         .select('nombre')
         .eq('ccp_id', ccpId)
         .order('nombre', { ascending: true });
-
       if (estError) {
         estacionesContainer.innerHTML = `<p class="text-danger text-center">Error al cargar estaciones: ${estError.message}</p>`;
         return;
       }
-
       if (estaciones.length === 0) {
         estacionesContainer.innerHTML = '<p class="text-muted text-center">Este CCP no tiene estaciones registradas.</p>';
         return;
       }
-
-      const ul = document.createElement('ul');
-      ul.className = 'list-group';
-      estaciones.forEach(e => {
-        const li = document.createElement('li');
-        li.className = 'list-group-item';
-        li.textContent = e.nombre;
-        ul.appendChild(li);
-      });
-      estacionesContainer.appendChild(ul);
+      estacionesList = estaciones;
+      renderEstaciones();
     });
+
+    // 🖼️ Render con botón "Ruta", tarjetas y paginación
+    function renderEstaciones() {
+      const start = (currentPage - 1) * itemsPerPage;
+      const end = start + itemsPerPage;
+      const pageEstaciones = estacionesList.slice(start, end);
+
+      const container = document.createElement('div');
+      container.className = 'row g-3';
+
+      pageEstaciones.forEach(e => {
+        const col = document.createElement('div');
+        col.className = 'col-12 col-md-6 col-lg-4';
+        col.innerHTML = `
+          <div class="card h-100 shadow-sm border-0">
+            <div class="card-body d-flex justify-content-between align-items-center">
+              <span class="fw-medium">${e.nombre}</span>
+              <a href="crear-rutas.html?estacion=${encodeURIComponent(e.nombre)}"
+                 class="btn btn-sm btn-pnb-gold">
+                🗺️ Ruta
+              </a>
+            </div>
+          </div>
+        `;
+        container.appendChild(col);
+      });
+
+      // Paginación
+      const totalPages = Math.ceil(estacionesList.length / itemsPerPage);
+      let paginationHTML = '';
+      if (totalPages > 1) {
+        const pageItems = [];
+        pageItems.push(`<li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
+          <button class="page-link" onclick="window.changePage(${currentPage - 1})">« Anterior</button>
+        </li>`);
+
+        for (let i = 1; i <= totalPages; i++) {
+          pageItems.push(`<li class="page-item ${i === currentPage ? 'active' : ''}">
+            <button class="page-link" onclick="window.changePage(${i})">${i}</button>
+          </li>`);
+        }
+
+        pageItems.push(`<li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
+          <button class="page-link" onclick="window.changePage(${currentPage + 1})">Siguiente »</button>
+        </li>`);
+
+        paginationHTML = `
+          <nav aria-label="Paginación" class="mt-4">
+            <ul class="pagination justify-content-center">${pageItems.join('')}</ul>
+          </nav>
+        `;
+      }
+
+      estacionesContainer.innerHTML = '';
+      estacionesContainer.appendChild(container);
+      if (paginationHTML) {
+        const paginationDiv = document.createElement('div');
+        paginationDiv.innerHTML = paginationHTML;
+        estacionesContainer.appendChild(paginationDiv);
+      }
+    }
+
+    // 🔄 Función global para cambio de página
+    window.changePage = (page) => {
+      const totalPages = Math.ceil(estacionesList.length / itemsPerPage);
+      if (page >= 1 && page <= totalPages) {
+        currentPage = page;
+        renderEstaciones();
+      }
+    };
   });
 </script>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
