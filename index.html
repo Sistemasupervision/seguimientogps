@@ -135,7 +135,7 @@
       let currentPage = 1;
       const itemsPerPage = 10;
 
-      // 🔍 Cargar estaciones al seleccionar CCP
+      // 🔍 Cargar estaciones (incluyendo google_maps_url)
       ccpSelector.addEventListener('change', async () => {
         const ccpId = ccpSelector.value;
         estacionesContainer.innerHTML = '';
@@ -148,7 +148,7 @@
 
         const { data: estaciones, error: estError } = await client
           .from('estaciones')
-          .select('nombre')
+          .select('id, nombre, google_maps_url')
           .eq('ccp_id', ccpId)
           .order('nombre', { ascending: true });
 
@@ -166,7 +166,7 @@
         renderEstaciones();
       });
 
-      // 🖼️ Render: lista vertical + botón "Ruta" → crear-rutas.html
+      // ✅ Render: lista vertical + botón condicional
       function renderEstaciones() {
         const start = (currentPage - 1) * itemsPerPage;
         const end = start + itemsPerPage;
@@ -178,12 +178,19 @@
         pageEstaciones.forEach(e => {
           const div = document.createElement('div');
           div.className = 'd-flex justify-content-between align-items-center p-2 border rounded bg-white';
+
+          let boton;
+          if (e.google_maps_url) {
+            // Si ya tiene URL, abrir Google Maps directamente
+            boton = `<a href="${e.google_maps_url}" target="_blank" class="btn btn-sm btn-primary">Ruta</a>`;
+          } else {
+            // Si no, ir al panel de asignación
+            boton = `<a href="crear-rutas.html?estacion=${encodeURIComponent(e.nombre)}" class="btn btn-sm btn-primary">Ruta</a>`;
+          }
+
           div.innerHTML = `
             <span class="fw-medium">${e.nombre}</span>
-            <a href="crear-rutas.html?estacion=${encodeURIComponent(e.nombre)}"
-               class="btn btn-sm btn-primary">
-              Ruta
-            </a>
+            ${boton}
           `;
           container.appendChild(div);
         });
@@ -223,7 +230,6 @@
         }
       }
 
-      // 🔄 Cambiar página
       window.changePage = (page) => {
         const totalPages = Math.ceil(estacionesList.length / itemsPerPage);
         if (page >= 1 && page <= totalPages) {
