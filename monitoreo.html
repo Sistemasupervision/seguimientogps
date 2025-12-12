@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Monitor de Supervisión - PNB Zulia</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="icon" href="LOGO-PNB.png" type="image/png">
+  <style>
+    :root {
+      --pnb-blue: #003366;
+      --pnb-blue-dark: #002244;
+      --pnb-gold: #d4af37;
+    }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f0f4f8;
+    }
+    header {
+      background-color: var(--pnb-blue);
+      color: white;
+      padding: 1.5rem 0;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    .logo-pnb {
+      height: 90px;
+      width: auto;
+      display: block;
+      margin: 0 auto 0.5rem;
+    }
+    .card {
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    }
+    .estado-activo { color: #28a745; font-weight: bold; }
+    .estado-retraso { color: #ffc107; font-weight: bold; }
+    .estado-finalizado { color: #6c757d; font-weight: bold; }
+    .refresh-indicator {
+      font-size: 0.9rem;
+      color: var(--pnb-blue);
+    }
+    footer {
+      background-color: var(--pnb-blue-dark);
+      color: white;
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+  <header class="text-center">
+    <div class="container">
+      <img src="LOGO-PNB.png" alt="Logo PNB" class="logo-pnb">
+      <h1 class="h5 fw-bold">📡 Monitor de Supervisión en Vivo</h1>
+      <p class="mb-0">Planes operativos activos - Centro de Control Zulia</p>
+    </div>
+  </header>
+
+  <div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h2 class="h5 fw-bold">Planes Activos</h2>
+      <div class="refresh-indicator" id="lastUpdate">Última actualización: --:--</div>
+    </div>
+
+    <div id="planesContainer">
+      <p class="text-muted text-center">Cargando planes activos...</p>
+    </div>
+  </div>
+
+  <footer class="text-center py-3 mt-4">
+    <div class="container">
+      © 2025 Policía Nacional Bolivariana - Estado Zulia
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script>
+    const supabaseUrl = 'https://zudpczjuqopswukhygau.supabase.co';
+    const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1ZHBjemp1cW9wc3d1a2h5Z2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU1MTM4NDYsImV4cCI6MjA4MTA4OTg0Nn0.v6E-MZt8CALyfXj6n3m_ePFO017XAQ_JBMJvW4fwaYE';
+    const client = supabase.createClient(supabaseUrl, supabaseAnonKey);
+
+    const planesContainer = document.getElementById('planesContainer');
+    const lastUpdate = document.getElementById('lastUpdate');
+
+    // Formatear fecha y hora
+    function formatDateTime(isoString) {
+      const d = new Date(isoString);
+      return d.toLocaleString('es-ES', {
+        day: '2-digit',
+        month: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    }
+
+    // Calcular tiempo transcurrido
+    function getElapsedTime(startTime) {
+      const start = new Date(startTime);
+      const now = new Date();
+      const diffMs = now - start;
+      const diffMins = Math.floor(diffMs / 60000);
+      const diffHours = Math.floor(diffMins / 60);
+      return {
+        totalMinutes: diffMins,
+        display: diffHours > 0 
+          ? `${diffHours}h ${diffMins % 60}m`
+          : `${diffMins}m`
+      };
+    }
+
+    // Cargar planes activos
+    async function cargarPlanesActivos() {
+      try {
+        const {  planes, error } = await client
+          .from('seguimientos_supervision')
+          .select(`
+            id,
+            estado,
+            inicio,
+            fin,
+            plan:planes_supervision!inner (
+              id,
+              tiempo_estimado_horas,
+              observaciones,
+              ccp:ccp!inner(nombre),
+              estaciones:estaciones!inner(nombre)
+            )
+          `)
+          .in('estado', ['iniciado', 'completado', 'cancelado'])
+          .order('inicio', { ascending: false });
+
+        if (error) throw error;
+
+        if (planes.length === 0) {
+          planesContainer.innerHTML = '<div class="alert alert-info text-center">No hay planes activos en este momento.</div>';
+          return;
+        }
+
+        let html = '';
+        planes.forEach(p => {
+          const plan = p.plan;
+          const elapsed = getElapsedTime(p.inicio);
+          const tiempoEstimadoMin = Math.round(plan.tiempo_estimado_horas * 60);
+          let estadoClase = 'estado-finalizado';
+          let estadoTexto = 'Finalizado';
+
+          if (p.estado === 'iniciado') {
+            if (elapsed.totalMinutes <= tiempoEstimadoMin) {
+              estadoClase = 'estado-activo';
+              estadoTexto = 'Activo';
+            } else {
+              estadoClase = 'estado-retraso';
+              estadoTexto = 'Retraso probable';
+            }
+          }
+
+          const estacionesNombres = plan.estaciones.map(e => e.nombre).join(', ');
+          html += `
+            <div class="card mb-3">
+              <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                  <div>
+                    <h5 class="mb-1">${plan.ccp.nombre}</h5>
+                    <p class="text-muted small mb-2">Estaciones: ${estacionesNombres}</p>
+                    <p class="mb-1"><strong>Iniciado:</strong> ${formatDateTime(p.inicio)}</p>
+                    <p class="mb-1"><strong>Tiempo estimado:</strong> ${tiempoEstimadoMin} min</p>
+                    <p class="mb-1"><strong>Tiempo transcurrido:</strong> ${elapsed.display}</p>
+                    ${plan.observaciones ? `<p class="mb-0"><small>📝 ${plan.observaciones}</small></p>` : ''}
+                  </div>
+                  <span class="${estadoClase}">${estadoTexto}</span>
+                </div>
+              </div>
+            </div>
+          `;
+        });
+
+        planesContainer.innerHTML = html;
+        lastUpdate.textContent = `Última actualización: ${new Date().toLocaleTimeString('es-ES')}`;
+      } catch (error) {
+        planesContainer.innerHTML = `<div class="alert alert-danger">Error al cargar planes: ${error.message}</div>`;
+      }
+    }
+
+    // Actualizar automáticamente cada 10 segundos
+    function iniciarMonitoreo() {
+      cargarPlanesActivos();
+      setInterval(cargarPlanesActivos, 10000);
+    }
+
+    document.addEventListener('DOMContentLoaded', iniciarMonitoreo);
+  </script>
+</body>
+</html>
