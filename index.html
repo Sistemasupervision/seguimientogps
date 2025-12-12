@@ -97,85 +97,85 @@
     </div>
   </footer>
 
-<!-- ✅ CDN FIJO que SÍ expone "supabase" (minúscula) -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <!-- Supabase -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      const supabaseUrl = 'https://zjbvvzncceuotwmyevia.supabase.co';
+      const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpqYnZ2em5jY2V1b3R3bXlldmlhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU0OTU3NTQsImV4cCI6MjA4MTA3MTc1NH0.oDFjh6P_1W24dewi-FXJunewjcz7DQUnw6FaD9CoEMs';
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-<script>
-  document.addEventListener('DOMContentLoaded', async () => {
-    // 🔑 Configuración de Supabase (¡RECUERDA ACTUALIZAR ESTO CON TUS CREDENCIALES REALES!)
-    const supabaseUrl = 'https://zjbvvzncceuotwmyevia.supabase.co';
-    const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpqYnZ2em5jY2V1b3R3bXlldmlhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU0OTU3NTQsImV4cCI6MjA4MTA3MTc1NH0.oDFjh6P_1W24dewi-FXJunewjcz7DQUnw6FaD9CoEMs';
-
-    if (typeof supabase === 'undefined') {
-      document.getElementById('estacionesContainer').innerHTML =
-        '<p class="text-danger text-center">❌ Supabase no disponible.</p>';
-      return;
-    }
-    const client = supabase.createClient(supabaseUrl, supabaseAnonKey);
-    const ccpSelector = document.getElementById('ccpSelector');
-    const estacionesContainer = document.getElementById('estacionesContainer');
-
-    // 🗂️ Cargar CCPs
-    const { data: ccps, error: ccpError } = await client
-      .from('ccp')
-      .select('id, nombre')
-      .order('nombre', { ascending: true });
-    if (ccpError) {
-      estacionesContainer.innerHTML = `<p class="text-danger text-center">Error al cargar CCPs: ${ccpError.message}</p>`;
-      return;
-    }
-    ccpSelector.innerHTML = '<option value="">-- Seleccione un CCP --</option>';
-    ccps.forEach(ccp => {
-      const opt = document.createElement('option');
-      opt.value = ccp.id;
-      opt.textContent = ccp.nombre;
-      ccpSelector.appendChild(opt);
-    });
-
-    let estacionesList = [];
-    let currentPage = 1;
-    const itemsPerPage = 10;
-
-    // 🔍 Cargar estaciones al seleccionar CCP
-    ccpSelector.addEventListener('change', async () => {
-      const ccpId = ccpSelector.value;
-      estacionesContainer.innerHTML = '';
-      currentPage = 1;
-
-      if (!ccpId) {
-        estacionesContainer.innerHTML = '<p class="text-muted text-center">Seleccione un CCP para visualizar sus estaciones policiales.</p>';
+      if (typeof supabase === 'undefined') {
+        document.getElementById('estacionesContainer').innerHTML =
+          '<p class="text-danger text-center">❌ Supabase no disponible.</p>';
         return;
       }
 
-      const { data: estaciones, error: estError } = await client
-        .from('estaciones')
-        .select('nombre')
-        .eq('ccp_id', ccpId)
+      const client = supabase.createClient(supabaseUrl, supabaseAnonKey);
+      const ccpSelector = document.getElementById('ccpSelector');
+      const estacionesContainer = document.getElementById('estacionesContainer');
+
+      // Cargar CCPs
+      const { data: ccps, error: ccpError } = await client
+        .from('ccp')
+        .select('id, nombre')
         .order('nombre', { ascending: true });
-
-      if (estError) {
-        estacionesContainer.innerHTML = `<p class="text-danger text-center">Error al cargar estaciones: ${estError.message}</p>`;
+      if (ccpError) {
+        estacionesContainer.innerHTML = `<p class="text-danger text-center">Error CCPs: ${ccpError.message}</p>`;
         return;
       }
 
-      estacionesList = estaciones;
-      renderEstaciones();
-    });
+      ccpSelector.innerHTML = '<option value="">-- Seleccione un CCP --</option>';
+      ccps.forEach(ccp => {
+        const opt = document.createElement('option');
+        opt.value = ccp.id;
+        opt.textContent = ccp.nombre;
+        ccpSelector.appendChild(opt);
+      });
 
-    // 🖼️ Renderiza página actual de estaciones con botones y paginación
-    function renderEstaciones() {
-      const start = (currentPage - 1) * itemsPerPage;
-      const end = start + itemsPerPage;
-      const pageEstaciones = estacionesList.slice(start, end);
+      let estacionesList = [];
+      let currentPage = 1;
+      const itemsPerPage = 10;
 
-      // Contenedor principal
-      const container = document.createElement('div');
-      container.className = 'row g-3';
+      // Cargar estaciones al seleccionar CCP
+      ccpSelector.addEventListener('change', async () => {
+        const ccpId = ccpSelector.value;
+        estacionesContainer.innerHTML = '';
+        currentPage = 1;
 
-      if (pageEstaciones.length === 0) {
-        container.innerHTML = '<p class="text-muted col-12 text-center">No hay estaciones para mostrar.</p>';
-      } else {
+        if (!ccpId) {
+          estacionesContainer.innerHTML = '<p class="text-muted text-center">Seleccione un CCP para visualizar sus estaciones policiales.</p>';
+          return;
+        }
+
+        const { data: estaciones, error: estError } = await client
+          .from('estaciones')
+          .select('nombre')
+          .eq('ccp_id', ccpId)
+          .order('nombre', { ascending: true });
+
+        if (estError) {
+          estacionesContainer.innerHTML = `<p class="text-danger text-center">Error estaciones: ${estError.message}</p>`;
+          return;
+        }
+
+        if (estaciones.length === 0) {
+          estacionesContainer.innerHTML = '<p class="text-muted text-center">Este CCP no tiene estaciones registradas.</p>';
+          return;
+        }
+
+        estacionesList = estaciones;
+        renderEstaciones();
+      });
+
+      // Render con paginación y botón "Ruta"
+      function renderEstaciones() {
+        const start = (currentPage - 1) * itemsPerPage;
+        const end = start + itemsPerPage;
+        const pageEstaciones = estacionesList.slice(start, end);
+
+        const container = document.createElement('div');
+        container.className = 'row g-3';
+
         pageEstaciones.forEach(e => {
           const col = document.createElement('div');
           col.className = 'col-12 col-md-6 col-lg-4';
@@ -192,51 +192,52 @@
           `;
           container.appendChild(col);
         });
+
+        // Paginación
+        const totalPages = Math.ceil(estacionesList.length / itemsPerPage);
+        let paginationHTML = '';
+        if (totalPages > 1) {
+          const pageItems = [];
+          pageItems.push(`<li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
+            <button class="page-link" onclick="window.changePage(${currentPage - 1})">« Anterior</button>
+          </li>`);
+
+          for (let i = 1; i <= totalPages; i++) {
+            pageItems.push(`<li class="page-item ${i === currentPage ? 'active' : ''}">
+              <button class="page-link" onclick="window.changePage(${i})">${i}</button>
+            </li>`);
+          }
+
+          pageItems.push(`<li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
+            <button class="page-link" onclick="window.changePage(${currentPage + 1})">Siguiente »</button>
+          </li>`);
+
+          paginationHTML = `
+            <nav aria-label="Paginación" class="mt-4">
+              <ul class="pagination justify-content-center">${pageItems.join('')}</ul>
+            </nav>
+          `;
+        }
+
+        estacionesContainer.innerHTML = '';
+        estacionesContainer.appendChild(container);
+        if (paginationHTML) {
+          const paginationDiv = document.createElement('div');
+          paginationDiv.innerHTML = paginationHTML;
+          estacionesContainer.appendChild(paginationDiv);
+        }
       }
 
-      // Paginación
-      const totalPages = Math.ceil(estacionesList.length / itemsPerPage);
-      let paginationHTML = '';
-      if (totalPages > 1) {
-        paginationHTML = `
-          <nav aria-label="Paginación de estaciones" class="mt-4">
-            <ul class="pagination justify-content-center">
-              <li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
-                <button class="page-link" onclick="changePage(${currentPage - 1})">« Anterior</button>
-              </li>
-              ${Array.from({ length: totalPages }, (_, i) => i + 1)
-                .map(page => `
-                  <li class="page-item ${page === currentPage ? 'active' : ''}">
-                    <button class="page-link" onclick="changePage(${page})">${page}</button>
-                  </li>
-                `).join('')}
-              <li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
-                <button class="page-link" onclick="changePage(${currentPage + 1})">Siguiente »</button>
-              </li>
-            </ul>
-          </nav>
-        `;
-      }
-
-      estacionesContainer.innerHTML = '';
-      estacionesContainer.appendChild(container);
-      if (paginationHTML) {
-        const paginationDiv = document.createElement('div');
-        paginationDiv.innerHTML = paginationHTML;
-        estacionesContainer.appendChild(paginationDiv);
-      }
-    }
-
-    // 🔄 Función global para cambiar de página
-    window.changePage = (page) => {
-      const totalPages = Math.ceil(estacionesList.length / itemsPerPage);
-      if (page >= 1 && page <= totalPages) {
-        currentPage = page;
-        renderEstaciones();
-      }
-    };
-  });
-</script>
+      // Función global para cambio de página
+      window.changePage = (page) => {
+        const totalPages = Math.ceil(estacionesList.length / itemsPerPage);
+        if (page >= 1 && page <= totalPages) {
+          currentPage = page;
+          renderEstaciones();
+        }
+      };
+    });
+  </script>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
