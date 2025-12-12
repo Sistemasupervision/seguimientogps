@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Crear Plan de Supervisión - PNB Zulia</title>
+  <title>Plan de Supervisión - PNB Zulia</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="icon" href="LOGO-PNB.png" type="image/png">
   <style>
@@ -42,6 +42,34 @@
       border-radius: 12px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.08);
     }
+    #mapPlaceholder {
+      height: 300px;
+      background: linear-gradient(135deg, #e0e7ff, #bbd0ff);
+      border-radius: 8px;
+      position: relative;
+      overflow: hidden;
+    }
+    .map-dot {
+      position: absolute;
+      width: 16px;
+      height: 16px;
+      background: var(--pnb-gold);
+      border-radius: 50%;
+      box-shadow: 0 0 8px rgba(0,0,0,0.4);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.2); opacity: 0.8; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    #counterDisplay {
+      font-size: 2rem;
+      font-weight: bold;
+      color: var(--pnb-blue);
+      text-align: center;
+      margin: 1rem 0;
+    }
     footer {
       background-color: var(--pnb-blue-dark);
       color: white;
@@ -53,7 +81,7 @@
   <header class="text-center">
     <div class="container">
       <img src="LOGO-PNB.png" alt="Logo PNB" class="logo-pnb">
-      <h1 class="h5 fw-bold">Crear Plan de Supervisión Operativa</h1>
+      <h1 class="h5 fw-bold">Plan de Supervisión Operativa</h1>
     </div>
   </header>
 
@@ -73,7 +101,7 @@
             <select id="estacionesInvolucradas" class="form-select" multiple size="5" required>
               <option value="">Seleccione un CCP primero</option>
             </select>
-            <div class="form-text">Mantenga presionada <strong>Ctrl</strong> (Windows) o <strong>Cmd</strong> (Mac) para seleccionar varias estaciones.</div>
+            <div class="form-text">Seleccione las estaciones que incluirá en su recorrido.</div>
           </div>
 
           <div class="row mb-3">
@@ -82,15 +110,10 @@
               <input type="date" class="form-control" id="fechaInicio" readonly>
             </div>
             <div class="col-md-6">
-              <label class="form-label fw-bold">Tiempo Estimado (horas)</label>
-              <input type="number" class="form-control" id="tiempoEstimado" min="0.5" step="0.5" placeholder="Ej: 2.5" required>
-              <div class="form-text">Tiempo aproximado de recorrido según distancia.</div>
+              <label class="form-label fw-bold">Tiempo Estimado</label>
+              <input type="text" class="form-control" id="tiempoEstimado" readonly placeholder="Se calcula automáticamente">
+              <div class="form-text">30 minutos por estación seleccionada.</div>
             </div>
-          </div>
-
-          <div class="mb-3">
-            <label class="form-label fw-bold">Patrullas/Unidades Asignadas</label>
-            <input type="text" class="form-control" id="patrullas" placeholder="Ej: PAT-101, UMO-205" required>
           </div>
 
           <div class="mb-3">
@@ -99,11 +122,17 @@
           </div>
 
           <div class="d-flex gap-2">
-            <button type="submit" class="btn btn-pnb-gold">💾 Guardar Plan</button>
+            <button type="button" id="iniciarBtn" class="btn btn-pnb-gold" disabled>▶️ Iniciar Supervisión</button>
             <a href="index.html" class="btn btn-secondary">← Volver</a>
           </div>
         </form>
-        <div id="mensaje" class="mt-3"></div>
+
+        <!-- Contador regresivo (oculto al inicio) -->
+        <div id="contadorSection" style="display:none; margin-top: 2rem;">
+          <h5 class="text-center fw-bold">⏱️ Tiempo Restante</h5>
+          <div id="counterDisplay">--:--:--</div>
+          <div id="mapPlaceholder"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -114,7 +143,6 @@
     </div>
   </footer>
 
-  <!-- Supabase SDK -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script>
     const supabaseUrl = 'https://zudpczjuqopswukhygau.supabase.co';
@@ -124,10 +152,28 @@
     const ccpAsignado = document.getElementById('ccpAsignado');
     const estacionesInvolucradas = document.getElementById('estacionesInvolucradas');
     const fechaInicio = document.getElementById('fechaInicio');
+    const tiempoEstimado = document.getElementById('tiempoEstimado');
+    const iniciarBtn = document.getElementById('iniciarBtn');
+    const contadorSection = document.getElementById('contadorSection');
 
-    // Establecer fecha actual automáticamente
+    // Fecha actual
     const hoy = new Date().toISOString().split('T')[0];
     fechaInicio.value = hoy;
+
+    // Calcular tiempo estimado
+    function calcularTiempo() {
+      const count = estacionesInvolucradas.selectedOptions.length;
+      if (count === 0) {
+        tiempoEstimado.value = '';
+        iniciarBtn.disabled = true;
+        return;
+      }
+      const minutos = count * 30; // 30 min por estación
+      const horas = Math.floor(minutos / 60);
+      const mins = minutos % 60;
+      tiempoEstimado.value = `${horas}h ${mins}m`;
+      iniciarBtn.disabled = false;
+    }
 
     // Cargar CCPs
     async function cargarCCPs() {
@@ -135,10 +181,7 @@
         .from('ccp')
         .select('id, nombre')
         .order('nombre', { ascending: true });
-      if (error) {
-        console.error('Error CCPs:', error);
-        return;
-      }
+      if (error) return;
       ccpAsignado.innerHTML = '<option value="">-- Seleccione un CCP --</option>';
       data.forEach(ccp => {
         const opt = document.createElement('option');
@@ -148,7 +191,7 @@
       });
     }
 
-    // Cargar estaciones al seleccionar CCP
+    // Cargar estaciones
     ccpAsignado.addEventListener('change', async () => {
       const ccpId = ccpAsignado.value;
       estacionesInvolucradas.innerHTML = '';
@@ -161,10 +204,7 @@
         .select('id, nombre')
         .eq('ccp_id', ccpId)
         .order('nombre', { ascending: true });
-      if (error) {
-        console.error('Error estaciones:', error);
-        return;
-      }
+      if (error) return;
       data.forEach(est => {
         const opt = document.createElement('option');
         opt.value = est.id;
@@ -173,24 +213,56 @@
       });
     });
 
-    // Guardar (modo demo)
-    document.getElementById('planForm').addEventListener('submit', (e) => {
-      e.preventDefault();
-      const estacionesSel = Array.from(estacionesInvolucradas.selectedOptions).map(o => o.textContent);
-      
-      console.log('Plan listo para guardar:', {
-        fecha_inicio: fechaInicio.value,
-        estaciones: estacionesSel,
-        tiempo_estimado: document.getElementById('tiempoEstimado').value + ' horas',
-        patrullas: document.getElementById('patrullas').value,
-        observaciones: document.getElementById('observaciones').value
-      });
-      
-      document.getElementById('mensaje').innerHTML = 
-        '<div class="alert alert-success">✅ Plan de supervisión registrado (modo demo). Para activar el guardado real, cree la tabla <code>planes_supervision</code> en Supabase.</div>';
+    // Eventos
+    estacionesInvolucradas.addEventListener('change', calcularTiempo);
+    ccpAsignado.addEventListener('change', () => {
+      tiempoEstimado.value = '';
+      iniciarBtn.disabled = true;
     });
 
-    // Iniciar
+    // Iniciar supervisión
+    iniciarBtn.addEventListener('click', () => {
+      const count = estacionesInvolucradas.selectedOptions.length;
+      if (count === 0) return;
+
+      const totalSegundos = count * 30 * 60; // 30 min por estación en segundos
+      contadorSection.style.display = 'block';
+      planForm.style.display = 'none';
+
+      // Simular mapa con puntos
+      const map = document.getElementById('mapPlaceholder');
+      map.innerHTML = '<div class="text-center py-4">📍 Iniciando seguimiento GPS...</div>';
+      setTimeout(() => {
+        map.innerHTML = '';
+        for (let i = 0; i < count; i++) {
+          const dot = document.createElement('div');
+          dot.className = 'map-dot';
+          dot.style.left = `${20 + i * 15}%`;
+          dot.style.top = `${30 + Math.sin(i) * 20 + 20}%`;
+          map.appendChild(dot);
+        }
+      }, 1000);
+
+      // Contador regresivo
+      let segundos = totalSegundos;
+      const display = document.getElementById('counterDisplay');
+      
+      const timer = setInterval(() => {
+        const h = Math.floor(segundos / 3600);
+        const m = Math.floor((segundos % 3600) / 60);
+        const s = segundos % 60;
+        display.textContent = 
+          `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+        
+        if (segundos <= 0) {
+          clearInterval(timer);
+          display.innerHTML = '<span class="text-success">✅ Supervisión completada</span>';
+          map.innerHTML = '<div class="text-center py-5 text-success fw-bold">Operativo finalizado con éxito</div>';
+        }
+        segundos--;
+      }, 1000);
+    });
+
     document.addEventListener('DOMContentLoaded', cargarCCPs);
   </script>
 </body>
