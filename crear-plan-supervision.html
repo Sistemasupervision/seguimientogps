@@ -84,7 +84,6 @@
       <h1 class="h5 fw-bold">Plan de Supervisión Operativa</h1>
     </div>
   </header>
-
   <div class="container py-4">
     <div class="card">
       <div class="card-body">
@@ -95,7 +94,6 @@
               <option value="">-- Seleccione un CCP --</option>
             </select>
           </div>
-
           <div class="mb-3">
             <label class="form-label fw-bold">Estaciones Involucradas</label>
             <select id="estacionesInvolucradas" class="form-select" multiple size="5" required>
@@ -103,7 +101,6 @@
             </select>
             <div class="form-text">Seleccione las estaciones que incluirá en su recorrido.</div>
           </div>
-
           <div class="row mb-3">
             <div class="col-md-6">
               <label class="form-label fw-bold">Fecha de Inicio</label>
@@ -114,194 +111,183 @@
               <input type="text" class="form-control" id="tiempoEstimado" readonly>
             </div>
           </div>
-
           <div class="mb-3">
             <label class="form-label fw-bold">Observaciones (Opcional)</label>
             <textarea class="form-control" id="observaciones" rows="2"></textarea>
           </div>
-
           <div class="d-flex gap-2">
             <button type="button" id="iniciarBtn" class="btn btn-pnb-gold" disabled>▶️ Iniciar Supervisión</button>
             <a href="index.html" class="btn btn-secondary">← Volver</a>
           </div>
         </form>
-
         <div id="contadorSection" style="display:none; margin-top: 2rem;">
           <h5 class="text-center fw-bold">⏱️ Tiempo Restante</h5>
           <div id="counterDisplay">--:--:--</div>
           <div id="mapPlaceholder"></div>
         </div>
-
         <div id="mensaje" class="mt-3"></div>
       </div>
     </div>
   </div>
-
   <footer class="text-center py-3 mt-4">
     <div class="container">
       © 2025 Policía Nacional Bolivariana - Estado Zulia
     </div>
   </footer>
 
- <script>
-  document.addEventListener('DOMContentLoaded', async () => {
-    // 1. Credenciales
-    const supabaseUrl = 'https://zudpczjuqopswukhygau.supabase.co';
-    const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1ZHBjemp1cW9wc3d1a2h5Z2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU1MTM4NDYsImV4cCI6MjA4MTA4OTg0Nn0.v6E-MZt8CALyfXj6n3m_ePFO017XAQ_JBMJvW4fwaYE';
+  <!-- ✅ SDK de Supabase (¡ES NECESARIO!) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.42.0/dist/umd/supabase.min.js"></script>
 
-    // 2. Verificar SDK
-    if (typeof supabase === 'undefined') {
-      document.getElementById('mensaje').innerHTML = '<div class="alert alert-danger">❌ Supabase SDK no cargado.</div>';
-      return;
-    }
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      const supabaseUrl = 'https://zudpczjuqopswukhygau.supabase.co';
+      const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1ZHBjemp1cW9wc3d1a2h5Z2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU1MTM4NDYsImV4cCI6MjA4MTA4OTg0Nn0.v6E-MZt8CALyfXj6n3m_ePFO017XAQ_JBMJvW4fwaYE';
+      
+      if (typeof supabase === 'undefined') {
+        document.getElementById('mensaje').innerHTML = '<div class="alert alert-danger">❌ Supabase SDK no cargado.</div>';
+        return;
+      }
 
-    // 3. ✅ Crear cliente con un nombre DISTINTO (¡no uses "supabase"!)
-    const client = supabase.createClient(supabaseUrl, supabaseAnonKey);
+      const client = supabase.createClient(supabaseUrl, supabaseAnonKey);
+      const ccpAsignado = document.getElementById('ccpAsignado');
+      const estacionesInvolucradas = document.getElementById('estacionesInvolucradas');
+      const fechaInicio = document.getElementById('fechaInicio');
+      const tiempoEstimado = document.getElementById('tiempoEstimado');
+      const iniciarBtn = document.getElementById('iniciarBtn');
+      const contadorSection = document.getElementById('contadorSection');
+      const mensaje = document.getElementById('mensaje');
+      const hoy = new Date().toISOString().split('T')[0];
+      fechaInicio.value = hoy;
 
-    // 4. Ahora usa "client" en todas las consultas
-    const ccpAsignado = document.getElementById('ccpAsignado');
-    const estacionesInvolucradas = document.getElementById('estacionesInvolucradas');
-    const fechaInicio = document.getElementById('fechaInicio');
-    const tiempoEstimado = document.getElementById('tiempoEstimado');
-    const iniciarBtn = document.getElementById('iniciarBtn');
-    const contadorSection = document.getElementById('contadorSection');
-    const mensaje = document.getElementById('mensaje');
+      function calcularTiempo() {
+        const count = estacionesInvolucradas.selectedOptions.length;
+        if (count === 0) {
+          tiempoEstimado.value = '';
+          iniciarBtn.disabled = true;
+          return;
+        }
+        const minutos = count * 30;
+        const horas = Math.floor(minutos / 60);
+        const mins = minutos % 60;
+        tiempoEstimado.value = `${horas}h ${mins}m`;
+        iniciarBtn.disabled = false;
+      }
 
-    const hoy = new Date().toISOString().split('T')[0];
-    fechaInicio.value = hoy;
+      async function cargarCCPs() {
+        const {  data, error } = await client
+          .from('ccp')
+          .select('id, nombre')
+          .order('nombre', { ascending: true });
+        if (error) {
+          mensaje.innerHTML = `<div class="alert alert-danger">Error CCPs: ${error.message}</div>`;
+          return;
+        }
+        ccpAsignado.innerHTML = '<option value="">-- Seleccione un CCP --</option>';
+        data.forEach(ccp => {
+          const opt = document.createElement('option');
+          opt.value = ccp.id;
+          opt.textContent = ccp.nombre;
+          ccpAsignado.appendChild(opt);
+        });
+      }
 
-    function calcularTiempo() {
-      const count = estacionesInvolucradas.selectedOptions.length;
-      if (count === 0) {
+      ccpAsignado.addEventListener('change', async () => {
+        const ccpId = ccpAsignado.value;
+        estacionesInvolucradas.innerHTML = '';
+        if (!ccpId) {
+          estacionesInvolucradas.innerHTML = '<option>Seleccione un CCP primero</option>';
+          return;
+        }
+        const {  data, error } = await client
+          .from('estaciones')
+          .select('id, nombre')
+          .eq('ccp_id', ccpId)
+          .order('nombre', { ascending: true });
+        if (error) {
+          mensaje.innerHTML = `<div class="alert alert-danger">Error estaciones: ${error.message}</div>`;
+          return;
+        }
+        data.forEach(est => {
+          const opt = document.createElement('option');
+          opt.value = est.id;
+          opt.textContent = est.nombre;
+          estacionesInvolucradas.appendChild(opt);
+        });
+      });
+
+      estacionesInvolucradas.addEventListener('change', calcularTiempo);
+      ccpAsignado.addEventListener('change', () => {
         tiempoEstimado.value = '';
         iniciarBtn.disabled = true;
-        return;
-      }
-      const minutos = count * 30;
-      const horas = Math.floor(minutos / 60);
-      const mins = minutos % 60;
-      tiempoEstimado.value = `${horas}h ${mins}m`;
-      iniciarBtn.disabled = false;
-    }
-
-    async function cargarCCPs() {
-      const {  data, error } = await client
-        .from('ccp')
-        .select('id, nombre')
-        .order('nombre', { ascending: true });
-      if (error) {
-        mensaje.innerHTML = `<div class="alert alert-danger">Error CCPs: ${error.message}</div>`;
-        return;
-      }
-      ccpAsignado.innerHTML = '<option value="">-- Seleccione un CCP --</option>';
-      data.forEach(ccp => {
-        const opt = document.createElement('option');
-        opt.value = ccp.id;
-        opt.textContent = ccp.nombre;
-        ccpAsignado.appendChild(opt);
       });
-    }
 
-    ccpAsignado.addEventListener('change', async () => {
-      const ccpId = ccpAsignado.value;
-      estacionesInvolucradas.innerHTML = '';
-      if (!ccpId) {
-        estacionesInvolucradas.innerHTML = '<option>Seleccione un CCP primero</option>';
-        return;
-      }
-      const {  data, error } = await client
-        .from('estaciones')
-        .select('id, nombre')
-        .eq('ccp_id', ccpId)
-        .order('nombre', { ascending: true });
-      if (error) {
-        mensaje.innerHTML = `<div class="alert alert-danger">Error estaciones: ${error.message}</div>`;
-        return;
-      }
-      data.forEach(est => {
-        const opt = document.createElement('option');
-        opt.value = est.id;
-        opt.textContent = est.nombre;
-        estacionesInvolucradas.appendChild(opt);
+      iniciarBtn.addEventListener('click', async () => {
+        const count = estacionesInvolucradas.selectedOptions.length;
+        if (count === 0) return;
+
+        const estacionesIds = Array.from(estacionesInvolucradas.selectedOptions).map(opt => parseInt(opt.value));
+        const planData = {
+          ccp_id: parseInt(ccpAsignado.value),
+          estaciones_ids: estacionesIds,
+          fecha_inicio: fechaInicio.value,
+          tiempo_estimado_horas: count * 0.5,
+          observaciones: document.getElementById('observaciones').value || null
+        };
+
+        const {  plan, error: planError } = await client
+          .from('planes_supervision')
+          .insert([planData])
+          .select('id')
+          .single();
+
+        if (planError) {
+          mensaje.innerHTML = `<div class="alert alert-danger">❌ Error: ${planError.message}</div>`;
+          return;
+        }
+
+        await client
+          .from('seguimientos_supervision')
+          .insert([{ plan_id: plan.id, estado: 'iniciado' }]);
+
+        contadorSection.style.display = 'block';
+        document.getElementById('planForm').style.display = 'none';
+
+        const map = document.getElementById('mapPlaceholder');
+        map.innerHTML = '<div class="text-center py-4">📍 Iniciando seguimiento GPS...</div>';
+        setTimeout(() => {
+          map.innerHTML = '';
+          for (let i = 0; i < count; i++) {
+            const dot = document.createElement('div');
+            dot.className = 'map-dot';
+            dot.style.left = `${20 + i * 15}%`;
+            dot.style.top = `${30 + Math.sin(i) * 20 + 20}%`;
+            map.appendChild(dot);
+          }
+        }, 1000);
+
+        let segundos = count * 30 * 60;
+        const display = document.getElementById('counterDisplay');
+        const timer = setInterval(async () => {
+          const h = Math.floor(segundos / 3600);
+          const m = Math.floor((segundos % 3600) / 60);
+          const s = segundos % 60;
+          display.textContent = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+          if (segundos <= 0) {
+            clearInterval(timer);
+            display.innerHTML = '<span class="text-success">✅ Supervisión completada</span>';
+            map.innerHTML = '<div class="text-center py-5 text-success fw-bold">Operativo finalizado con éxito</div>';
+            await client
+              .from('seguimientos_supervision')
+              .update({ estado: 'completado', fin: new Date().toISOString() })
+              .eq('plan_id', plan.id)
+              .eq('estado', 'iniciado');
+          }
+          segundos--;
+        }, 1000);
       });
+
+      cargarCCPs();
     });
-
-    estacionesInvolucradas.addEventListener('change', calcularTiempo);
-    ccpAsignado.addEventListener('change', () => {
-      tiempoEstimado.value = '';
-      iniciarBtn.disabled = true;
-    });
-
-    // ✅ Guardar y simular
-    iniciarBtn.addEventListener('click', async () => {
-      const count = estacionesInvolucradas.selectedOptions.length;
-      if (count === 0) return;
-
-      const estacionesIds = Array.from(estacionesInvolucradas.selectedOptions).map(opt => parseInt(opt.value));
-      const planData = {
-        ccp_id: parseInt(ccpAsignado.value),
-        estaciones_ids: estacionesIds,
-        fecha_inicio: fechaInicio.value,
-        tiempo_estimado_horas: count * 0.5,
-        observaciones: document.getElementById('observaciones').value || null
-      };
-
-      const { data: plan, error: planError } = await client
-        .from('planes_supervision')
-        .insert([planData])
-        .select('id')
-        .single();
-
-      if (planError) {
-        mensaje.innerHTML = `<div class="alert alert-danger">❌ Error: ${planError.message}</div>`;
-        return;
-      }
-
-      // Registrar seguimiento
-      await client
-        .from('seguimientos_supervision')
-        .insert([{ plan_id: plan.id, estado: 'iniciado' }]);
-
-      // Mostrar simulación
-      contadorSection.style.display = 'block';
-      document.getElementById('planForm').style.display = 'none';
-
-      const map = document.getElementById('mapPlaceholder');
-      map.innerHTML = '<div class="text-center py-4">📍 Iniciando seguimiento GPS...</div>';
-      setTimeout(() => {
-        map.innerHTML = '';
-        for (let i = 0; i < count; i++) {
-          const dot = document.createElement('div');
-          dot.className = 'map-dot';
-          dot.style.left = `${20 + i * 15}%`;
-          dot.style.top = `${30 + Math.sin(i) * 20 + 20}%`;
-          map.appendChild(dot);
-        }
-      }, 1000);
-
-      let segundos = count * 30 * 60;
-      const display = document.getElementById('counterDisplay');
-      const timer = setInterval(async () => {
-        const h = Math.floor(segundos / 3600);
-        const m = Math.floor((segundos % 3600) / 60);
-        const s = segundos % 60;
-        display.textContent = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-        if (segundos <= 0) {
-          clearInterval(timer);
-          display.innerHTML = '<span class="text-success">✅ Supervisión completada</span>';
-          map.innerHTML = '<div class="text-center py-5 text-success fw-bold">Operativo finalizado con éxito</div>';
-          await client
-            .from('seguimientos_supervision')
-            .update({ estado: 'completado', fin: new Date().toISOString() })
-            .eq('plan_id', plan.id)
-            .eq('estado', 'iniciado');
-        }
-        segundos--;
-      }, 1000);
-    });
-
-    cargarCCPs();
-  });
-</script>
+  </script>
 </body>
 </html>
