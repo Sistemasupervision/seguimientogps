@@ -52,17 +52,21 @@
       border-bottom: none;
     }
     #mapPlaceholder {
-      height: 300px;
-      background: linear-gradient(135deg, #e0f0ff, #bbdfff);
+      height: 320px;
+      background-image: url('https://upload.wikimedia.org/wikipedia/commons/thumb/9/9c/Mapa_de_Maracaibo.png/800px-Mapa_de_Maracaibo.png');
+      background-size: cover;
+      background-position: center;
       border-radius: 8px;
       position: relative;
       overflow: hidden;
+      border: 2px solid var(--pnb-blue);
     }
     .map-unit {
       position: absolute;
-      width: 24px;
-      height: 24px;
+      width: 28px;
+      height: 28px;
       background: var(--pnb-gold);
+      border: 2px solid var(--pnb-blue);
       border-radius: 50%;
       display: flex;
       align-items: center;
@@ -70,12 +74,12 @@
       color: var(--pnb-blue);
       font-weight: bold;
       font-size: 12px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-      animation: bounce 2s infinite;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+      animation: pulseMap 2s infinite;
     }
-    @keyframes bounce {
-      0%, 100% { transform: translateY(0); }
-      50% { transform: translateY(-10px); }
+    @keyframes pulseMap {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.15); }
     }
     #counterDisplay {
       font-size: 2.2rem;
@@ -83,19 +87,22 @@
       color: var(--pnb-blue);
       text-align: center;
       margin: 1rem 0;
-      text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
     }
     .launch-animation {
       animation: fadeInScale 0.8s ease-out;
     }
     @keyframes fadeInScale {
-      from { opacity: 0; transform: scale(0.9); }
+      from { opacity: 0; transform: scale(0.95); }
       to { opacity: 1; transform: scale(1); }
     }
     footer {
       background-color: var(--pnb-blue-dark);
       color: white;
       font-size: 0.9rem;
+    }
+    .pagination-sm .page-link {
+      padding: 0.25rem 0.5rem;
+      font-size: 0.875rem;
     }
   </style>
 </head>
@@ -122,6 +129,7 @@
             <div id="estacionesCheckContainer" class="mt-2">
               <p class="text-muted">Seleccione un CCP primero</p>
             </div>
+            <div id="estacionesPagination" class="mt-2"></div>
           </div>
 
           <div class="row mb-3">
@@ -177,6 +185,7 @@
 
       const ccpAsignado = document.getElementById('ccpAsignado');
       const estacionesCheckContainer = document.getElementById('estacionesCheckContainer');
+      const estacionesPagination = document.getElementById('estacionesPagination');
       const fechaInicio = document.getElementById('fechaInicio');
       const tiempoEstimado = document.getElementById('tiempoEstimado');
       const iniciarBtn = document.getElementById('iniciarBtn');
@@ -186,6 +195,8 @@
       fechaInicio.value = hoy;
 
       let estacionesCache = [];
+      let currentPage = 1;
+      const itemsPerPage = 10;
 
       function calcularTiempo() {
         const checkboxes = estacionesCheckContainer.querySelectorAll('input[type="checkbox"]:checked');
@@ -201,6 +212,63 @@
         tiempoEstimado.value = `${horas}h ${mins}m`;
         iniciarBtn.disabled = false;
       }
+
+      function renderEstacionesWithPagination() {
+        const start = (currentPage - 1) * itemsPerPage;
+        const end = start + itemsPerPage;
+        const pageEstaciones = estacionesCache.slice(start, end);
+
+        let html = '';
+        pageEstaciones.forEach(est => {
+          const isChecked = document.getElementById(`est_${est.id}`)?.checked || false;
+          html += `
+            <div class="estacion-check">
+              <input class="form-check-input me-2" type="checkbox" id="est_${est.id}" value="${est.id}" ${isChecked ? 'checked' : ''}>
+              <label class="form-check-label" for="est_${est.id}">${est.nombre}</label>
+            </div>
+          `;
+        });
+        estacionesCheckContainer.innerHTML = html.length ? html : '<p class="text-muted">No hay estaciones para mostrar.</p>';
+        
+        // Reasignar eventos
+        estacionesCheckContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+          cb.addEventListener('change', calcularTiempo);
+        });
+
+        // Paginación
+        const totalPages = Math.ceil(estacionesCache.length / itemsPerPage);
+        if (totalPages <= 1) {
+          estacionesPagination.innerHTML = '';
+          return;
+        }
+
+        let paginationHTML = '<nav aria-label="Paginación de estaciones"><ul class="pagination pagination-sm justify-content-center">';
+        paginationHTML += `<li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
+          <button class="page-link" onclick="changeStationPage(${currentPage - 1})">«</button>
+        </li>`;
+
+        for (let i = 1; i <= totalPages; i++) {
+          paginationHTML += `<li class="page-item ${i === currentPage ? 'active' : ''}">
+            <button class="page-link" onclick="changeStationPage(${i})">${i}</button>
+          </li>`;
+        }
+
+        paginationHTML += `<li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
+          <button class="page-link" onclick="changeStationPage(${currentPage + 1})">»</button>
+        </li>`;
+        paginationHTML += '</ul></nav>';
+
+        estacionesPagination.innerHTML = paginationHTML;
+      }
+
+      // Función global para cambio de página
+      window.changeStationPage = (page) => {
+        const totalPages = Math.ceil(estacionesCache.length / itemsPerPage);
+        if (page >= 1 && page <= totalPages) {
+          currentPage = page;
+          renderEstacionesWithPagination();
+        }
+      };
 
       async function cargarCCPs() {
         const { data, error } = await client
@@ -223,6 +291,8 @@
       ccpAsignado.addEventListener('change', async () => {
         const ccpId = ccpAsignado.value;
         estacionesCheckContainer.innerHTML = '<p class="text-muted">Cargando estaciones...</p>';
+        estacionesPagination.innerHTML = '';
+        currentPage = 1;
         if (!ccpId) {
           estacionesCheckContainer.innerHTML = '<p class="text-muted">Seleccione un CCP primero</p>';
           return;
@@ -237,28 +307,8 @@
           return;
         }
         estacionesCache = data;
-        renderEstacionesCheckboxes(data);
+        renderEstacionesWithPagination();
       });
-
-      function renderEstacionesCheckboxes(estaciones) {
-        if (estaciones.length === 0) {
-          estacionesCheckContainer.innerHTML = '<p class="text-muted">Este CCP no tiene estaciones registradas.</p>';
-          return;
-        }
-        let html = '';
-        estaciones.forEach(est => {
-          html += `
-            <div class="estacion-check">
-              <input class="form-check-input me-2" type="checkbox" id="est_${est.id}" value="${est.id}">
-              <label class="form-check-label" for="est_${est.id}">${est.nombre}</label>
-            </div>
-          `;
-        });
-        estacionesCheckContainer.innerHTML = html;
-        estacionesCheckContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-          cb.addEventListener('change', calcularTiempo);
-        });
-      }
 
       iniciarBtn.addEventListener('click', async () => {
         const checkboxes = estacionesCheckContainer.querySelectorAll('input[type="checkbox"]:checked');
@@ -290,12 +340,11 @@
           .from('seguimientos_supervision')
           .insert([{ plan_id: plan.id, estado: 'iniciado' }]);
 
-        // Mostrar simulación con animación
         document.getElementById('planForm').style.display = 'none';
         contadorSection.style.display = 'block';
 
         const map = document.getElementById('mapPlaceholder');
-        map.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Iniciando...</span></div><p class="mt-2">📡 Estableciendo conexión con unidades...</p></div>';
+        map.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-primary" role="status"></div><p class="mt-2">📡 Conectando con unidades en Maracaibo...</p></div>';
         
         setTimeout(() => {
           map.innerHTML = '';
@@ -304,8 +353,16 @@
             const unit = document.createElement('div');
             unit.className = 'map-unit';
             unit.textContent = 'P';
-            unit.style.left = `${20 + i * 12}%`;
-            unit.style.top = `${30 + Math.sin(i) * 15 + 15}%`;
+            // Posiciones aproximadas dentro del mapa
+            const positions = [
+              { x: 30, y: 40 }, { x: 50, y: 35 }, { x: 70, y: 45 },
+              { x: 40, y: 60 }, { x: 60, y: 55 }, { x: 25, y: 50 },
+              { x: 55, y: 25 }, { x: 65, y: 70 }, { x: 35, y: 20 },
+              { x: 45, y: 75 }
+            ];
+            const pos = positions[i % positions.length];
+            unit.style.left = `${pos.x}%`;
+            unit.style.top = `${pos.y}%`;
             map.appendChild(unit);
           });
         }, 1500);
@@ -320,7 +377,7 @@
           if (segundos <= 0) {
             clearInterval(timer);
             display.innerHTML = '<span class="text-success">✅ Operativo Finalizado</span>';
-            map.innerHTML = '<div class="text-center py-5"><div class="text-success" style="font-size:3rem;">🛡️</div><p class="mt-2 fw-bold">¡Supervisión completada con éxito!</p></div>';
+            map.innerHTML = '<div class="text-center py-5"><div class="text-success" style="font-size:3rem;">🛡️</div><p class="mt-2 fw-bold">¡Supervisión completada en Maracaibo!</p></div>';
             await client
               .from('seguimientos_supervision')
               .update({ estado: 'completado', fin: new Date().toISOString() })
